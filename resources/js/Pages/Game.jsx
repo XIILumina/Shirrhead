@@ -6,6 +6,7 @@ const Game = ({ game, players }) => {
   const [error, setError] = useState(null);
   const [isGameStarted, setIsGameStarted] = useState(false);
   const [currentPlayer, setCurrentPlayer] = useState(null);
+  const [copyMessage, setCopyMessage] = useState(""); // State for feedback when copying
 
   useEffect(() => {
     const fetchGame = async () => {
@@ -49,14 +50,30 @@ const Game = ({ game, players }) => {
     ));
   };
 
+  const handleCopy = () => {
+    navigator.clipboard.writeText(game.invite_code || "N/A").then(() => {
+      setCopyMessage("Copied!");
+      setTimeout(() => setCopyMessage(""), 2000); // Clear message after 2 seconds
+    });
+  };
+
   return (
     <div className="max-w-5xl mx-auto my-8 p-6 bg-gray-100 rounded-lg shadow-lg">
       {/* Game Header */}
       <header className="flex justify-between items-center bg-blue-600 text-white p-4 rounded-lg shadow-md mb-6">
         <h1 className="text-3xl font-bold">Game: {game.name}</h1>
-        <div className="bg-gray-900 text-white px-4 py-2 rounded-lg">
+        <div className="flex items-center space-x-2 bg-gray-900 text-white px-4 py-2 rounded-lg">
           <p className="text-sm font-semibold">Invite Code:</p>
-          <p className="text-lg font-bold">{game.inviteCode || "N/A"}</p>
+          <span className="text-lg font-bold">{game.invite_code || "N/A"}</span>
+          <button
+            onClick={handleCopy}
+            className="ml-2 px-3 py-1 text-white text-sm rounded transition"
+          >
+            🔗
+          </button>
+          {copyMessage && (
+            <span className="text-xs text-gray-300 ml-2">{copyMessage}</span>
+          )}
         </div>
       </header>
 

@@ -39,7 +39,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/game/join', [GameController::class, 'joinGameByCode']);
     Route::post('/game/create', [GameController::class, 'createGame'])->name('game.create');
     Route::get('/game/{game}', [GameController::class, 'viewgame'])->name('game.view');
-
+    Route::post('/game/join-by-invite', [GameController::class, 'joinGameByCode']);
     // Route::get('/game/{gameId}', function ($gameId) {
     //     return Inertia::render('Game', [
     //         'game_Id' => $gameId
