@@ -45,16 +45,26 @@ const Dashboard = () => {
     }
   };
 
-  const handleCreateGame = async () => {
+  const handleCreateLobby = async () => {
     try {
-      const response = await axios.post("/game/create");
-      if (response.data.game_id) {
-        window.location.href = `/game/${response.data.game_id}`;
-      }
+        const response = await axios.post('/lobby/create');
+        console.log('Lobby created:', response.data);
     } catch (error) {
-      console.error("Error creating game:", error);
+        console.error('Error creating lobby:', error);
     }
-  };
+};
+const handleCreateSoloGame = async () => {
+  try {
+    const response = await axios.post('/game/createSolo');
+
+    if (response.data.redirect_url) {
+        window.location.href = response.data.redirect_url; // Redirect to the game view
+    }
+} catch (error) {
+    console.error('Error creating solo game:', error);
+    alert('Failed to create solo game. Please try again.');
+}
+};
 
   const handleJoinByInviteCode = async () => {
     if (!inviteCode) {
@@ -63,15 +73,15 @@ const Dashboard = () => {
     }
 
     try {
-      const response = await axios.post("/game/join-by-invite", { invite_code: inviteCode });
+      const response = await axios.post("/lobby/join", { invite_code: inviteCode });
       if (response.data.success) {
-        window.location.href = `/game/${response.data.game_id}`;
+        window.location.href = `/lobby/${response.data.game_id}`;
       } else {
-        alert("Failed to join the game. Invalid invite code.");
+        alert("Failed to join the lobby. Invalid invite code.");
       }
     } catch (error) {
-      console.error("Error joining game:", error);
-      alert("An error occurred while joining the game.");
+      console.error("Error joining Lobby:", error);
+      alert("An error occurred while joining the Lobby.");
     }
   };
 
@@ -100,11 +110,17 @@ const Dashboard = () => {
             </button>
           )}
           <button
-            onClick={handleCreateGame}
+            onClick={handleCreateLobby}
             className="px-6 py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-transform transform hover:scale-105"
           >
-            Create Hosted Game
+            Host Multiplayer Lobby
           </button>
+          <button
+              onClick={handleCreateSoloGame}
+              className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-transform transform hover:scale-105"
+            >
+              Make Solo Game
+            </button>
         </div>
 
         {/* Join by Invite Code */}
@@ -121,7 +137,7 @@ const Dashboard = () => {
             onClick={handleJoinByInviteCode}
             className="px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-transform transform hover:scale-105"
           >
-            Join Game
+            Join Lobby
           </button>
         </div>
 
