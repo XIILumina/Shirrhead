@@ -5,7 +5,10 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 class Lobby extends Model
 {
-    protected $fillable = ['invite_code', 'status', 'players'];
+    protected $fillable = [
+    'invite_code',
+    'status',
+    'players'];
 
     // Accessor to decode players JSON
     public function getPlayersAttribute($value)
