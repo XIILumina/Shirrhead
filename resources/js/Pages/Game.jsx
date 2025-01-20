@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
-import Echo from "laravel-echo";
 
 const Game = ({ gameData, userId }) => {
   const [playerHand, setPlayerHand] = useState([]);

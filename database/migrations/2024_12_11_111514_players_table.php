@@ -10,16 +10,17 @@ return new class extends Migration
     {
         Schema::create('players', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('user_id');
-            $table->unsignedBigInteger('game_id');
-            $table->json('hand'); // Player's hand
-            $table->json('visible_cards'); // Visible cards
-            $table->json('hidden_cards'); // Hidden cards
-            $table->unsignedInteger('position'); // Position in the game
-            $table->timestamps();
+        $table->unsignedBigInteger('user_id')->nullable(); // Allow null for AI players
+        $table->unsignedBigInteger('game_id');
+        $table->json('hand')->nullable();
+        $table->json('visible_cards')->nullable();
+        $table->json('hidden_cards')->nullable();
+        $table->integer('position');
+        $table->timestamps();
 
-            $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
-            $table->foreign('game_id')->references('id')->on('games')->onDelete('cascade');
+        // Foreign key constraints
+        $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
+        $table->foreign('game_id')->references('id')->on('games')->onDelete('cascade');
         });
     }
 

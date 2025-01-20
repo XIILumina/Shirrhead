@@ -45,7 +45,7 @@ class GameController extends Controller
     public function createSoloGame(Request $request)
     {
         $user = Auth::user();
-
+    
         try {
             // Create a new game
             $game = Game::create([
@@ -55,7 +55,7 @@ class GameController extends Controller
                 'cards' => json_encode(['deck' => $this->generateDeck(), 'pile' => []]), // Initialize deck and pile
                 'invite_code' => null,
             ]);
-
+    
             // Add player to the game
             Player::create([
                 'game_id' => $game->id,
@@ -65,7 +65,7 @@ class GameController extends Controller
                 'hand' => json_encode([]),
                 'position' => 0,
             ]);
-
+    
             // Add AI as an enemy
             Player::create([
                 'game_id' => $game->id,
@@ -75,7 +75,7 @@ class GameController extends Controller
                 'hand' => json_encode([]),
                 'position' => 1,
             ]);
-
+    
             return response()->json([
                 'message' => 'Solo game created',
                 'game' => $game,
@@ -86,6 +86,7 @@ class GameController extends Controller
             return response()->json(['message' => 'Failed to create solo game'], 500);
         }
     }
+    
 
     public function startSoloGame(Game $game)
     {

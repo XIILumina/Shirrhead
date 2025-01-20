@@ -39,13 +39,13 @@ Route::middleware('auth')->group(function () {
     Route::post('join', [LobbyController::class, 'joinLobby']);
     });
 
-    Route::get('/lobby/{inviteCode}', [LobbyController::class, 'viewLobby'])->name('lobby.view');
-    Route::post('/lobby/{inviteCode}/join', [LobbyController::class, 'joinLobby']);
-    Route::post('/lobby/{inviteCode}/ready', [LobbyController::class, 'markReady']);
-    Route::post('/lobby/{inviteCode}/start', [LobbyController::class, 'startGame']);
-    // Route::get('/lobby/{inviteCode}', [LobbyController::class, 'fetchLobby'])->name('lobby');
-    Route::post('/lobby/create', [LobbyController::class, 'createLobby'])->name('lobby.create');
-    
+    Route::prefix('lobby')->middleware('auth')->group(function () {
+        Route::post('/create', [LobbyController::class, 'createLobby'])->name('lobby.create');
+        Route::get('/{inviteCode}', [LobbyController::class, 'viewLobby'])->name('lobby.view');
+        Route::post('/{inviteCode}/join', [LobbyController::class, 'joinLobby']);
+        Route::post('/{inviteCode}/ready', [LobbyController::class, 'markReady']);
+        Route::post('/{inviteCode}/start', [LobbyController::class, 'startGame']);
+    });
     
     
     Route::post('/game/createSolo', [GameController::class, 'createSoloGame'])->name('game.solo');
