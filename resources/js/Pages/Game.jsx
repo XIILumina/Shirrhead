@@ -10,9 +10,10 @@ const Game = ({ gameData, userId }) => {
 
   useEffect(() => {
     if (gameData) {
+      console.log("Game data:", gameData);
       setPlayerHand(gameData.playerHand);
       setFaceUpPile(gameData.faceUpPile);
-      setFaceDownPile(gameData.faceDownPile);
+      setFaceDownPile(gameData.faceDownPile); // Ensure this is populated correctly
       setTurnInfo({
         currentPlayer: gameData.currentPlayer,
         action: gameData.action,
@@ -20,6 +21,7 @@ const Game = ({ gameData, userId }) => {
     }
   }, [gameData]);
 
+  
   const handleCardSelect = (card) => {
     if (selectedCards.includes(card)) {
       setSelectedCards(selectedCards.filter((c) => c !== card));
@@ -30,7 +32,7 @@ const Game = ({ gameData, userId }) => {
 
   const playCards = () => {
     if (selectedCards.length > 0) {
-      Inertia.post("/play-cards", {
+      axios.post("/play-cards", {
         cards: selectedCards,
         userId,
       });
@@ -39,7 +41,7 @@ const Game = ({ gameData, userId }) => {
   };
 
   const drawCard = () => {
-    Inertia.post("/draw-card", { userId });
+    axios.post("/draw-card", { userId }); // Ensure Inertia is defined
   };
 
   return (
@@ -55,7 +57,7 @@ const Game = ({ gameData, userId }) => {
         <div className="p-4">
           <h2 className="text-xl font-semibold">Face-Down Pile</h2>
           <div className="bg-gray-600 h-24 w-16 rounded flex items-center justify-center">
-            <p>{faceDownPile.length} Cards</p>
+            <p>{faceDownPile ? faceDownPile.length : 0} Cards</p>
           </div>
         </div>
         <div className="p-4">
