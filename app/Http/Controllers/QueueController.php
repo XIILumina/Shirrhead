@@ -8,51 +8,64 @@ use Illuminate\Http\Request;
 
 class QueueController extends Controller
 {
-    // Получить текущую очередь
-    public function index()
+    // Get current queue status
+    public function status()
     {
-        $queueCount = Queue::count(); // Подсчитываем количество пользователей в очереди
+        $userId = Auth::id();
+        $inQueue = Queue::where('user_id', $userId)->exists();
 
-        // Возвращаем информацию о текущем состоянии очереди
         return response()->json([
-            'queue_count' => $queueCount,
-            'queue_time' => '0 seconds', // Здесь можно добавить логику для вычисления времени в очереди, если это нужно
+            'in_queue' => $inQueue,
+            'message' => $inQueue ? 'In queue' : 'Not in queue',
+            'queue_count' => Queue::count(),
+            'queue_time' => '0 seconds', // Add logic to calculate queue time if needed
         ]);
     }
 
-    // Добавить пользователя в очередь
+    // Get current queue information
+    public function index()
+    {
+        $queueCount = Queue::count(); // Count users in the queue
+
+        return response()->json([
+            'queue_count' => $queueCount,
+            'queue_time' => '0 seconds', // Add logic to calculate queue time if needed
+        ]);
+    }
+
+    // Add user to the queue
     public function joinQueue()
     {
         $user = Auth::user();
 
-        // Проверяем, не находится ли пользователь уже в очереди
+        // Check if the user is already in the queue
         if (Queue::where('user_id', $user->id)->exists()) {
             return response()->json(['message' => 'You are already in the queue'], 400);
         }
 
-        // Добавляем пользователя в очередь
+        // Add the user to the queue
         Queue::create(['user_id' => $user->id]);
 
-        // Проверяем количество игроков в очереди
+        // Check the number of players in the queue
         $queueCount = Queue::count();
 
         if ($queueCount >= 2) {
-            // Если в очереди достаточно людей, создаем игру (это можно улучшить с помощью событий)
+            // If there are enough players, create a game (you can improve this with events)
             app(GameController::class)->createGame();
         }
 
         return response()->json(['message' => 'Joined the queue successfully']);
     }
 
-    // Удалить пользователя из очереди
+    // Remove user from the queue
     public function leaveQueue(Request $request)
     {
         $userId = auth()->id();
 
-        // Находим пользователя в очереди
+        // Find the user in the queue
         $queueEntry = Queue::where('user_id', $userId)->first();
         if ($queueEntry) {
-            // Удаляем пользователя из очереди
+            // Remove the user from the queue
             $queueEntry->delete();
             return response()->json(['message' => 'You left the queue.']);
         }

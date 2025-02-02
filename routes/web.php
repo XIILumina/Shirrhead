@@ -30,7 +30,8 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
     
         // Queue actions
-    Route::get('/queue', [QueueController::class, 'index']);
+    Route::get('/queue', [QueueController::class, 'index']);    
+    Route::get('/queue/status', [QueueController::class, 'status']);
     Route::post('/queue/join', [QueueController::class, 'joinQueue'])->name('queue.join');
     Route::post('/queue/leave', [QueueController::class, 'leaveQueue'])->name('queue.leave');
 
@@ -55,16 +56,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/game/{game}', [GameController::class, 'viewgame'])->name('game.view');
 
     Route::get('/game/{gameId}/state', [GameController::class, 'getGameState']);
-    Route::post('/game/{gameId}/play-card', [PlayerController::class, 'playCard']);
-    Route::post('/game/{gameId}/pick-up', [PlayerController::class, 'pickUpCards']);
-    Route::post('/game/{gameId}/draw-card', [PlayerController::class, 'drawCard']);
-
-
-    // Route::post('/game/{gameId}/play', [GameController::class, 'playCard'])->name('game.play_card');
-    // Route::post('/game/{gameId}/pick_up_cards', [GameController::class, 'pickUpCards'])->name('game.pick_up_cards');
-    // Route::post('/game/{gameId}/player/{playerId}/play', [PlayerController::class, 'playCard'])->name('player.play_card');
-    // Route::post('/game/{gameId}/player/{playerId}/pick_up_cards', [PlayerController::class, 'pickUpCards'])->name('player.pick_up_cards');
-    // Route::post('/game/{gameId}/player/{playerId}/draw', [PlayerController::class, 'drawCard'])->name('player.draw_card');
+    Route::post('/game/{gameId}/player/{playerId}/play', [PlayerController::class, 'playCard'])->name('player.play_card');
+    Route::post('/game/{gameId}/player/{playerId}/pick_up_cards', [PlayerController::class, 'pickUpCards'])->name('player.pick_up_cards');
+    Route::post('/game/{gameId}/player/{playerId}/draw', [PlayerController::class, 'drawCard'])->name('player.draw_card');
 
     });
     

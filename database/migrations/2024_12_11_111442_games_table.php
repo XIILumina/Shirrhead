@@ -14,7 +14,7 @@ return new class extends Migration
             $table->enum('status', ['pending', 'ongoing', 'completed']);
             $table->unsignedBigInteger('current_turn')->nullable();
             $table->json('cards'); // Stores game deck and pile
-            $table->timestamps();
+            $table->timestamp('start_time')->nullable();
             $table->string('invite_code', 6)->unique()->nullable();
         });
     }

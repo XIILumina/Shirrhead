@@ -100,7 +100,11 @@ const Dashboard = () => {
     const handleCreateLobby = async () => {
         try {
             const response = await axios.post("/lobby/create");
-            console.log("Lobby created:", response.data);
+    
+            if (response.data.redirect_url) {
+                // Redirect the user to the lobby view
+                window.location.href = response.data.redirect_url;
+            }
         } catch (error) {
             console.error("Error creating lobby:", error);
         }

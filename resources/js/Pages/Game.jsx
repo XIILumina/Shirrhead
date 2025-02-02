@@ -7,6 +7,7 @@ const Game = ({ game, players }) => {
   const [deckCount, setDeckCount] = useState(0);
   const [playerTurn, setPlayerTurn] = useState(false);
   const [gameStatus, setGameStatus] = useState(game.status);
+  const [timeElapsed, setTimeElapsed] = useState(0);
 
   // Fetch the player's current state
   const fetchPlayerState = async () => {
@@ -22,6 +23,13 @@ const Game = ({ game, players }) => {
       console.error("Error fetching game state:", err);
     }
   };
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTimeElapsed((prevTime) => prevTime + 1);
+    }, 1000);
+  
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     fetchPlayerState();
@@ -68,6 +76,7 @@ const Game = ({ game, players }) => {
       <h1>{game.name}</h1>
       <p>Status: {gameStatus}</p>
       <p>Deck cards remaining: {deckCount}</p>
+      <p>Time Elapsed: {timeElapsed} seconds</p>
 
       {gameStatus === "ongoing" && (
         <>

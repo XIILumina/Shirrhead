@@ -1,7 +1,8 @@
 <?php
 namespace App\Http\Controllers;
 
-use Auth;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use App\Models\Game;
 use App\Models\Player;
@@ -57,6 +58,7 @@ public function createSoloGame(Request $request)
             "current_turn" => rand(0, 1), // Random starting turn
             'status' => 'ongoing',
             'cards' => json_encode(['deck' => $this->generateDeck(), 'pile' => []]), // Initialize deck and pile
+            'start_time' => now(),
         ]);
 
         // Add player to the game
@@ -76,7 +78,7 @@ public function createSoloGame(Request $request)
             'redirect_url' => route('game.view', ['game' => $game->id]) // Redirect to the game view
         ], 201);
     } catch (\Exception $e) {
-        \Log::error('Error creating solo game: ' . $e->getMessage());
+        Log::error('Error creating solo game: ' . $e->getMessage());
         return response()->json(['message' => 'Failed to create solo game'], 500);
     }
 }
@@ -113,18 +115,24 @@ public function startSoloGame(Game $game)
     $deck = $this->generateDeck();
     shuffle($deck);
 
-    // Deal 3 cards to the player
-    $hands = [];
-    $hands[0] = array_splice($deck, 0, 3); // Dealing 3 cards to the single player
+    // Deal cards to the player
+    $hand = array_splice($deck, 0, 3);
+    $visible = array_splice($deck, 0, 3);
+    $hidden = array_splice($deck, 0, 3);
 
-    // Set the game state and save
-    $game->cards = json_encode($deck); // Remaining deck
+    // Set game state
+    $game->cards = json_encode([
+        'deck' => $deck, 
+        'pile' => [],
+    ]);
     $game->status = 'ongoing';
     $game->save();
 
-    // Update player hand
+    // Update player
     $player = Player::where('game_id', $game->id)->first();
-    $player->hand = json_encode($hands[0]);
+    $player->hand = json_encode($hand);
+    $player->visible_cards = json_encode($visible);
+    $player->hidden_cards = json_encode($hidden);
     $player->save();
 }
 
@@ -146,6 +154,7 @@ public function startSoloGame(Game $game)
             'status' => 'pending',
             'cards' => json_encode([]),
             'invite_code' => $inviteCode,
+            'start_time' => now(),
         ]);
     
         Player::create([
