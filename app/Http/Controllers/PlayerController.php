@@ -14,12 +14,11 @@ class PlayerController extends Controller
     {
         $user = Auth::user();
         $player = Player::where('user_id', $user->id)->where('game_id', $gameId)->first();
-
         if (!$player) {
             return response()->json(['message' => 'You are not part of this game'], 403);
         }
 
-        $playedCards = $request->input('cards');
+        $playedCards = $request->input('cards'); // Cards the player is trying to play
         $hand = json_decode($player->hand, true);
         $game = Game::find($gameId);
 
@@ -27,35 +26,84 @@ class PlayerController extends Controller
             return response()->json(['message' => 'Game is not in progress'], 400);
         }
 
+        $gameCards = json_decode($game->cards, true);
+        $pile = $gameCards['pile'] ?? [];
+
+        // Validate the played cards
         foreach ($playedCards as $card) {
-            $index = array_search($card, $hand);
-            if ($index === false) {
-                return response()->json(['message' => 'You cannot play this card'], 400);
+            if (!in_array($card, $hand)) {
+                return response()->json(['message' => 'You cannot play a card you do not have'], 400);
             }
-            unset($hand[$index]); // Remove the card
+
+            // Check if card is valid compared to the pile top
+            $topCard = end($pile); // Get the top card
+            if ($topCard && !$this->isValidPlay($card, $topCard)) {
+                return response()->json(['message' => 'Invalid card play'], 400);
+            }
         }
 
+        // Remove played cards from hand
+        foreach ($playedCards as $card) {
+            $index = array_search($card, $hand);
+            unset($hand[$index]);
+        }
         $hand = array_values($hand); // Reindex the array
-        $player->hand = json_encode($hand);
 
-        // Update the pile in the game state
-        $gameCards = json_decode($game->cards, true);
-        $gameCards['pile'] = array_merge($gameCards['pile'] ?? [], $playedCards);
+        // Update the pile
+        $pile = array_merge($pile, $playedCards);
+
+        // Special rule: Handle special cards like 2 and 10
+        foreach ($playedCards as $card) {
+            if ($card['value'] === '10') {
+                $pile = []; // Burn the pile
+                break;
+            } elseif ($card['value'] === '2') {
+                break; // Reset allows any card next
+            }
+        }
+
+        // Update game state
+        $gameCards['pile'] = $pile;
+        $gameCards['deck'] = $gameCards['deck'] ?? [];
         $game->cards = json_encode($gameCards);
 
+        // Draw cards to maintain 3 cards in hand
+        while (count($hand) < 3 && !empty($gameCards['deck'])) {
+            $hand[] = array_shift($gameCards['deck']);
+        }
+
+        // Save changes
+        $player->hand = json_encode($hand);
+        $game->cards = json_encode($gameCards);
         $player->save();
         $game->save();
 
-        // Check if the player won
+        // Check for win condition
         if (count($hand) === 0) {
             $game->status = 'completed';
             $game->winner = $user->id;
             $game->save();
-
             return response()->json(['message' => 'You won the game!'], 200);
         }
 
         return response()->json(['message' => 'Card(s) played successfully', 'hand' => $player->hand]);
+    }
+
+    // Helper to validate card play
+    private function isValidPlay($card, $topCard)
+    {
+        // Special cards like '2' are always valid
+        if ($card['value'] === '2') return true;
+
+        // '10' burns the pile, always valid
+        if ($card['value'] === '10') return true;
+
+        // Normal card check: must be >= top card
+        $values = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+        $cardIndex = array_search($card['value'], $values);
+        $topCardIndex = array_search($topCard['value'], $values);
+
+        return $cardIndex >= $topCardIndex;
     }
 
     // Pick up the pile
@@ -70,26 +118,29 @@ class PlayerController extends Controller
 
         $game = Game::find($gameId);
         $gameCards = json_decode($game->cards, true);
-
         $pile = $gameCards['pile'] ?? [];
+
         if (empty($pile)) {
             return response()->json(['message' => 'No cards in the pile to pick up'], 400);
         }
 
-        $playerHand = json_decode($player->hand, true);
-        $playerHand = array_merge($playerHand, $pile);
+        // Add pile to player's hand
+        $hand = json_decode($player->hand, true);
+        $hand = array_merge($hand, $pile);
 
-        $player->hand = json_encode($playerHand);
-        $gameCards['pile'] = []; // Clear the pile
+        // Clear the pile
+        $gameCards['pile'] = [];
         $game->cards = json_encode($gameCards);
 
+        // Save updates
+        $player->hand = json_encode($hand);
         $player->save();
         $game->save();
 
         return response()->json(['message' => 'Picked up all cards from the pile', 'hand' => $player->hand]);
     }
 
-    // Draw a card from the deck
+    // Draw a card
     public function drawCard($gameId)
     {
         $user = Auth::user();
@@ -101,24 +152,25 @@ class PlayerController extends Controller
 
         $game = Game::find($gameId);
         $gameCards = json_decode($game->cards, true);
-
         $deck = $gameCards['deck'] ?? [];
+
         if (empty($deck)) {
             return response()->json(['message' => 'No cards left in the deck'], 400);
         }
 
-        $drawnCard = array_shift($deck); // Draw the top card
+        // Draw the top card
+        $drawnCard = array_shift($deck);
+        $hand = json_decode($player->hand, true);
+        $hand[] = $drawnCard;
+
+        // Save updates
         $gameCards['deck'] = $deck;
-
-        $playerHand = json_decode($player->hand, true);
-        $playerHand[] = $drawnCard;
-
-        $player->hand = json_encode($playerHand);
         $game->cards = json_encode($gameCards);
+        $player->hand = json_encode($hand);
 
-        $player->save();
         $game->save();
+        $player->save();
 
-        return response()->json(['message' => 'Card drawn successfully', 'card' => $drawnCard]);
+        return response()->json(['message' => 'Card drawn successfully', 'card' => $drawnCard, 'hand' => $player->hand]);
     }
 }
