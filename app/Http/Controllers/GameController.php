@@ -99,6 +99,8 @@ public function getGameState($gameId)
 
     return response()->json([
         'hand' => json_decode($player->hand, true),
+        'visible_cards' => json_decode($player->visible_cards, true),
+        'hidden_cards' => json_decode($player->hidden_cards, true),
         'pile' => $gameCards['pile'] ?? [],
         'deck' => $gameCards['deck'] ?? [],
         'turn' => $game->current_turn == $user->id,
@@ -196,7 +198,7 @@ public function startSoloGame(Game $game)
 
         return $game;
     } catch (\Exception $e) {
-        \Log::error('Error creating game from lobby: ' . $e->getMessage());
+        Log::error('Error creating game from lobby: ' . $e->getMessage());
         return response()->json(['message' => 'Failed to create game from lobby'], 500);
     } 
 }
@@ -251,11 +253,6 @@ public function startSoloGame(Game $game)
         'players' => Player::where('game_id', $game->id)->get(),
     ]);
 }
-
-
-
-
-
 
     
 }

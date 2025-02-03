@@ -15,8 +15,8 @@ class LobbyController extends Controller
     public function viewLobby($inviteCode)
     {
         $lobby = Lobby::where('invite_code', $inviteCode)->firstOrFail();
-        $players = json_decode($lobby->players, true);
-
+        $players = json_decode($lobby->players, true) ?? []; // Ensure players is always an array
+    
         return Inertia::render('Lobby', [
             'lobby' => $lobby,
             'players' => $players,

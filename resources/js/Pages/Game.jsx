@@ -3,6 +3,8 @@ import axios from "axios";
 
 const Game = ({ game, players }) => {
   const [hand, setHand] = useState([]);
+  const [visibleCards, setVisibleCards] = useState([]);
+  const [hiddenCards, setHiddenCards] = useState([]);
   const [pile, setPile] = useState([]);
   const [deckCount, setDeckCount] = useState(0);
   const [playerTurn, setPlayerTurn] = useState(false);
@@ -13,9 +15,11 @@ const Game = ({ game, players }) => {
   const fetchPlayerState = async () => {
     try {
       const response = await axios.get(`/game/${game.id}/state`);
-      const { hand, pile, deck, turn } = response.data;
+      const { hand, pile, deck, turn, visible_cards, hidden_cards } = response.data;
 
       setHand(hand);
+      setVisibleCards(visible_cards);
+      setHiddenCards(hidden_cards);
       setPile(pile);
       setDeckCount(deck.length);
       setPlayerTurn(turn);
@@ -23,11 +27,12 @@ const Game = ({ game, players }) => {
       console.error("Error fetching game state:", err);
     }
   };
+
   useEffect(() => {
     const timer = setInterval(() => {
       setTimeElapsed((prevTime) => prevTime + 1);
     }, 1000);
-  
+
     return () => clearInterval(timer);
   }, []);
 
@@ -85,8 +90,40 @@ const Game = ({ game, players }) => {
             <div>
               {hand.map((card, index) => (
                 <button key={index} onClick={() => playCard(card)}>
-                  {card.value} of {card.suit}
+                  <img
+                    src={`/images/cards/${card.value}_of_${card.suit}.png`}
+                    alt={`${card.value} of ${card.suit}`}
+                    style={{ width: "100px", margin: "5px" }}
+                  />
                 </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <h2>Visible Cards</h2>
+            <div>
+              {visibleCards.map((card, index) => (
+                <img
+                  key={index}
+                  src={`/images/cards/${card.value}_of_${card.suit}.png`}
+                  alt={`${card.value} of ${card.suit}`}
+                  style={{ width: "100px", margin: "5px" }}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <h2>Hidden Cards</h2>
+            <div>
+              {hiddenCards.map((_, index) => (
+                <img
+                  key={index}
+                  src="/images/cards/back.png"
+                  alt="Hidden Card"
+                  style={{ width: "100px", margin: "5px" }}
+                />
               ))}
             </div>
           </div>
@@ -94,10 +131,11 @@ const Game = ({ game, players }) => {
           <div>
             <h2>Pile</h2>
             {pile.length > 0 ? (
-              <p>
-                Top Card: {pile[pile.length - 1].value} of{" "}
-                {pile[pile.length - 1].suit}
-              </p>
+              <img
+                src={`/images/cards/${pile[pile.length - 1].value}_of_${pile[pile.length - 1].suit}.png`}
+                alt={`Top Card: ${pile[pile.length - 1].value} of ${pile[pile.length - 1].suit}`}
+                style={{ width: "100px", margin: "5px" }}
+              />
             ) : (
               <p>Pile is empty</p>
             )}
