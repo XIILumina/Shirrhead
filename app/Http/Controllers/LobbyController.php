@@ -9,17 +9,29 @@ use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
+use App\Models\User;
 
 class LobbyController extends Controller
 {
     public function viewLobby($inviteCode)
     {
         $lobby = Lobby::where('invite_code', $inviteCode)->firstOrFail();
-        $players = json_decode($lobby->players, true) ?? []; // Ensure players is always an array
+        $players = json_decode($lobby->players, true) ?? [];
+    
+        // Fetch player names
+        $playersWithNames = [];
+        foreach ($players as $player) {
+            $user = User::find($player['id']);
+            $playersWithNames[] = [
+                'id' => $player['id'],
+                'name' => $user->name,
+                'ready' => $player['ready']
+            ];
+        }
     
         return Inertia::render('Lobby', [
             'lobby' => $lobby,
-            'players' => $players,
+            'players' => $playersWithNames,
             'inviteCode' => $inviteCode,
         ]);
     }
@@ -27,12 +39,12 @@ class LobbyController extends Controller
     public function createLobby(Request $request)
     {
         try {
-            if (!auth()->check()) {
+            if (!Auth::check()) {
                 return redirect()->route('login'); // Redirect if not authenticated
             }
     
             $inviteCode = Str::random(5);
-            $userId = auth()->id();
+            $userId = Auth::id();
     
             $lobby = Lobby::create([
                 'invite_code' => $inviteCode,
@@ -57,56 +69,59 @@ class LobbyController extends Controller
     public function joinLobby(Request $request, $inviteCode)
     {
         try {
-            $userId = auth()->id(); // Use auth()->id() consistently
+            $userId = Auth::id(); // Use auth()->id() consistently
             $lobby = Lobby::where('invite_code', $inviteCode)->firstOrFail();
-
-            $players = json_decode($lobby->players, true);
-
+    
+            $players = json_decode($lobby->players, true) ?? [];
+    
+            // Check if the user is already in the lobby
             if (in_array($userId, array_column($players, 'id'))) {
                 return response()->json(['message' => 'Already in lobby']);
             }
-
+    
+            // Add the new player to the lobby
             $players[] = ['id' => $userId, 'ready' => false];
             $lobby->players = json_encode($players);
             $lobby->save();
-
+    
             return response()->json(['message' => 'Joined lobby', 'lobby' => $lobby]);
         } catch (\Exception $e) {
             Log::error('Error joining lobby: ' . $e->getMessage());
             return response()->json(['message' => 'Failed to join lobby'], 500);
         }
     }
-
     public function markReady(Request $request, $inviteCode)
     {
         try {
-            $userId = auth()->id(); // Use auth()->id() consistently
+            $userId = Auth::id(); 
             $lobby = Lobby::where('invite_code', $inviteCode)->firstOrFail();
-            $players = json_decode($lobby->players, true);
-
+            $players = json_decode($lobby->players, true) ?? [];
+    
+            // Update the player's ready status
             foreach ($players as &$player) {
                 if ($player['id'] === $userId) {
                     $player['ready'] = true;
                     break;
                 }
             }
-
+    
             $lobby->players = json_encode($players);
+    
+            // Check if all players are ready
             $allReady = collect($players)->every(fn($p) => $p['ready']);
-
+    
             if ($allReady && count($players) >= 2) {
                 $lobby->status = 'ready';
             }
-
+    
             $lobby->save();
-
+    
             return response()->json(['message' => 'Marked ready', 'lobby' => $lobby]);
         } catch (\Exception $e) {
             Log::error('Error marking ready: ' . $e->getMessage());
             return response()->json(['message' => 'Failed to mark ready'], 500);
         }
     }
-
     public function startGame($inviteCode)
     {
         try {

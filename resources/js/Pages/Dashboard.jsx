@@ -113,7 +113,7 @@ const Dashboard = () => {
     const handleCreateSoloGame = async () => {
         try {
             const response = await axios.post("/game/createSolo");
-
+    
             if (response.data.redirect_url) {
                 window.location.href = response.data.redirect_url;
             }

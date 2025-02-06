@@ -12,16 +12,16 @@ return new class extends Migration
             $table->id();
             $table->unsignedBigInteger('user_id');
             $table->unsignedBigInteger('game_id');
-            $table->json('hand'); // Player's hand
-            $table->json('visible_cards'); // Visible cards
-            $table->json('hidden_cards'); // Hidden cards
-            $table->unsignedInteger('position'); // Position in the game
+            $table->json('hand')->nullable();
+            $table->json('visible_cards')->nullable();
+            $table->json('hidden_cards')->nullable();
+            $table->integer('position')->default(0);
             $table->timestamps();
 
             $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
             $table->foreign('game_id')->references('id')->on('games')->onDelete('cascade');
         });
-    }
+ }
 
     public function down(): void
     {

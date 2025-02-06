@@ -2,12 +2,15 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
+use App\Events\CardPlayed;
 use App\Models\Game;
 use App\Models\Player;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+
 
 
 class GameController extends Controller
@@ -27,6 +30,7 @@ class GameController extends Controller
 
 
 
+    
     private function generateDeck()
     {
         $suits = ['hearts', 'diamonds', 'clubs', 'spades'];
@@ -43,99 +47,121 @@ class GameController extends Controller
         return $deck;
     }
 
+    public function playCard(Request $request, $gameId)
+    {
+        $user = Auth::user();
+        $player = Player::where('user_id', $user->id)->where('game_id', $gameId)->first();
+    
+        if (!$player) {
+            return response()->json(['message' => 'You are not part of this game'], 403);
+        }
+    
+        $card = $request->input('card');
+        $game = Game::findOrFail($gameId);
+    
+        // Update game state (e.g., move card from hand to pile)
+        // ...
+    
+        // Broadcast the CardPlayed event
+        Broadcast::channel('game.' . $gameId, function ($user, $gameId) {
+            return $user->can('view-game', Game::find($gameId));
+        });
+    
+        broadcast(new CardPlayed($gameId, $card))->toOthers();
+    
+        return response()->json(['message' => 'Card played successfully']);
+    }
+
+    
+    public function getGameState($gameId)
+    {
+        $user = Auth::user();
+        $game = Game::findOrFail($gameId);
+    
+        // Get the current player's state
+        $player = Player::where('game_id', $gameId)->where('user_id', $user->id)->first();
+    
+        if (!$player) {
+            return response()->json(['message' => 'You are not part of this game'], 403);
+        }
+    
+        // Get the opponent's visible cards
+        $opponents = Player::where('game_id', $gameId)
+            ->where('user_id', '!=', $user->id)
+            ->get();
+    
+        $enemyVisibleCards = [];
+        foreach ($opponents as $opponent) {
+            $enemyVisibleCards = array_merge($enemyVisibleCards, json_decode($opponent->visible_cards, true));
+        }
+    
+        // Decode game cards
+        $gameCards = json_decode($game->cards, true);
+    
+        return response()->json([
+            'hand' => json_decode($player->hand, true),
+            'visible_cards' => json_decode($player->visible_cards, true),
+            'hidden_cards' => json_decode($player->hidden_cards, true),
+            'pile' => $gameCards['pile'] ?? [],
+            'deck' => $gameCards['deck'] ?? [],
+            'turn' => $game->current_turn == $user->id,
+            'enemy_visible_cards' => $enemyVisibleCards, // Add enemy's visible cards
+        ]);
+    }
 
 
 
 
 public function createSoloGame(Request $request)
 {
-    $user = Auth::user();
-
     try {
-        // Create a new game
+        $userId = Auth::id();
+
+        // Generate a unique invite code
+        $inviteCode = Str::random(6);
+
+        // Create the game
         $game = Game::create([
-            "name" => "Solo Game",
-            "current_turn" => rand(0, 1), // Random starting turn
+            'name' => 'Solo Game',
             'status' => 'ongoing',
-            'cards' => json_encode(['deck' => $this->generateDeck(), 'pile' => []]), // Initialize deck and pile
+            'cards' => json_encode([]),
+            'invite_code' => $inviteCode,
             'start_time' => now(),
         ]);
 
-        // Add player to the game
+        // Generate deck and shuffle it
+        $deck = $this->generateDeck();
+        shuffle($deck);
+
+        // Deal cards to the player
+        $hand = array_splice($deck, 0, 3);
+        $visible = array_splice($deck, 0, 3);
+        $hidden = array_splice($deck, 0, 3);
+
+        // Create the player
         Player::create([
+            'user_id' => $userId,
             'game_id' => $game->id,
-            'user_id' => $user->id,
-            'visible_cards' => json_encode([]), // Empty visible cards
-            'hidden_cards' => json_encode([]), // Empty hidden cards
-            'hand' => json_encode([]), // Empty hand at the start
-            'position' => $game->current_turn, // Set the player's position based on current turn
+            'hand' => json_encode($hand),
+            'visible_cards' => json_encode($visible),
+            'hidden_cards' => json_encode($hidden),
+            'position' => 0,
         ]);
 
-        // Return the redirect URL after creating the solo game
+        // Set game state
+        $game->cards = json_encode([
+            'deck' => $deck, 
+            'pile' => [],
+        ]);
+        $game->save();
+
         return response()->json([
-            'message' => 'Solo game created',
-            'game' => $game,
-            'redirect_url' => route('game.view', ['game' => $game->id]) // Redirect to the game view
-        ], 201);
+            'redirect_url' => '/game/' . $game->id,
+        ]);
     } catch (\Exception $e) {
         Log::error('Error creating solo game: ' . $e->getMessage());
         return response()->json(['message' => 'Failed to create solo game'], 500);
     }
-}
-
-
-
-public function getGameState($gameId)
-{
-    $user = auth()->user();
-    $player = Player::where('game_id', $gameId)->where('user_id', $user->id)->first();
-
-    if (!$player) {
-        return response()->json(['message' => 'You are not part of this game'], 403);
-    }
-
-    $game = Game::find($gameId);
-    $gameCards = json_decode($game->cards, true);
-
-    return response()->json([
-        'hand' => json_decode($player->hand, true),
-        'visible_cards' => json_decode($player->visible_cards, true),
-        'hidden_cards' => json_decode($player->hidden_cards, true),
-        'pile' => $gameCards['pile'] ?? [],
-        'deck' => $gameCards['deck'] ?? [],
-        'turn' => $game->current_turn == $user->id,
-    ]);
-}
-
-
-
-
-
-public function startSoloGame(Game $game)
-{
-    // Generate deck and shuffle it
-    $deck = $this->generateDeck();
-    shuffle($deck);
-
-    // Deal cards to the player
-    $hand = array_splice($deck, 0, 3);
-    $visible = array_splice($deck, 0, 3);
-    $hidden = array_splice($deck, 0, 3);
-
-    // Set game state
-    $game->cards = json_encode([
-        'deck' => $deck, 
-        'pile' => [],
-    ]);
-    $game->status = 'ongoing';
-    $game->save();
-
-    // Update player
-    $player = Player::where('game_id', $game->id)->first();
-    $player->hand = json_encode($hand);
-    $player->visible_cards = json_encode($visible);
-    $player->hidden_cards = json_encode($hidden);
-    $player->save();
 }
 
 
@@ -147,7 +173,7 @@ public function startSoloGame(Game $game)
     // Create a new game and generate a unique invite code
     public function createGame()
     {
-        $userId = auth()->id();
+        $userId = Auth::id();
     
         $inviteCode = Str::random(6);
     
@@ -210,7 +236,7 @@ public function startSoloGame(Game $game)
     // Join game by invite code
     public function joinGameByCode(Request $request)
 {
-    $userId = auth()->id();
+    $userId = Auth::id();
     $inviteCode = $request->input('invite_code');
 
     // Find the game by invite code

@@ -1,3 +1,18 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+
+@keyframes slideToPile {
+    0% {
+      transform: translateY(0) rotate(0deg);
+    }
+    100% {
+      transform: translateY(-100px) rotate(10deg);
+    }
+  }
+  
+  .card-animation {
+    animation: slideToPile 0.5s ease-in-out forwards;
+  }
+  

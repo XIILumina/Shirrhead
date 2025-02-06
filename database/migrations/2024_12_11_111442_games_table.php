@@ -11,11 +11,11 @@ return new class extends Migration
         Schema::create('games', function (Blueprint $table) {
             $table->id();
             $table->string('name');
-            $table->enum('status', ['pending', 'ongoing', 'completed']);
+            $table->string('status')->default('pending');
             $table->unsignedBigInteger('current_turn')->nullable();
-            $table->json('cards'); // Stores game deck and pile
-            $table->timestamp('start_time')->nullable();
-            $table->string('invite_code', 6)->unique()->nullable();
+            $table->json('cards')->nullable();
+            $table->string('invite_code')->unique();
+            $table->timestamps();
         });
     }
 

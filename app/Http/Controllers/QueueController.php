@@ -60,7 +60,7 @@ class QueueController extends Controller
     // Remove user from the queue
     public function leaveQueue(Request $request)
     {
-        $userId = auth()->id();
+        $userId = Auth::id();
 
         // Find the user in the queue
         $queueEntry = Queue::where('user_id', $userId)->first();
