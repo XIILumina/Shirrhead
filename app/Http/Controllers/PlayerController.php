@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Game;
+use Illuminate\Support\Facades\Log;
 use App\Models\Player;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -14,70 +15,79 @@ class PlayerController extends Controller
     {
         $user = Auth::user();
         $player = Player::where('user_id', $user->id)->where('game_id', $gameId)->first();
+    
         if (!$player) {
             return response()->json(['message' => 'You are not part of this game'], 403);
         }
-
-        $playedCards = $request->input('cards'); // Cards the player is trying to play
+    
+        $card = $request->input('card'); // Ensure this is an array
         $hand = json_decode($player->hand, true);
         $game = Game::find($gameId);
-
+        
+            // Debugging
+    Log::info("Card being played:", $card);
+    Log::info("Player's hand:", $hand);
+        // Validate card format
+        if (!isset($card['value']) || !isset($card['suit'])) {
+            return response()->json(['message' => 'Invalid card format'], 400);
+        }
+    
         if (!$game || $game->status !== 'ongoing') {
             return response()->json(['message' => 'Game is not in progress'], 400);
         }
-
+    
         $gameCards = json_decode($game->cards, true);
         $pile = $gameCards['pile'] ?? [];
-
+    
         // Validate the played cards
-        foreach ($playedCards as $card) {
-            if (!in_array($card, $hand)) {
+        foreach ($card as $c) {
+            if (!in_array($c, $hand)) {
                 return response()->json(['message' => 'You cannot play a card you do not have'], 400);
             }
-
+    
             // Check if card is valid compared to the pile top
             $topCard = end($pile); // Get the top card
-            if ($topCard && !$this->isValidPlay($card, $topCard)) {
+            if ($topCard && !$this->isValidPlay($c, $topCard)) {
                 return response()->json(['message' => 'Invalid card play'], 400);
             }
         }
-
+    
         // Remove played cards from hand
-        foreach ($playedCards as $card) {
-            $index = array_search($card, $hand);
+        foreach ($card as $c) {
+            $index = array_search($c, $hand);
             unset($hand[$index]);
         }
         $hand = array_values($hand); // Reindex the array
-
+    
         // Update the pile
-        $pile = array_merge($pile, $playedCards);
-
+        $pile = array_merge($pile, $card);
+    
         // Special rule: Handle special cards like 2 and 10
-        foreach ($playedCards as $card) {
-            if ($card['value'] === '10') {
+        foreach ($card as $c) {
+            if ($c['value'] === '10') {
                 $pile = []; // Burn the pile
                 break;
-            } elseif ($card['value'] === '2') {
+            } elseif ($c['value'] === '2') {
                 break; // Reset allows any card next
             }
         }
-
+    
         // Update game state
         $gameCards['pile'] = $pile;
         $gameCards['deck'] = $gameCards['deck'] ?? [];
         $game->cards = json_encode($gameCards);
-
+    
         // Draw cards to maintain 3 cards in hand
         while (count($hand) < 3 && !empty($gameCards['deck'])) {
             $hand[] = array_shift($gameCards['deck']);
         }
-
+    
         // Save changes
         $player->hand = json_encode($hand);
         $game->cards = json_encode($gameCards);
         $player->save();
         $game->save();
-
+    
         // Check for win condition
         if (count($hand) === 0) {
             $game->status = 'completed';
@@ -85,7 +95,7 @@ class PlayerController extends Controller
             $game->save();
             return response()->json(['message' => 'You won the game!'], 200);
         }
-
+    
         return response()->json(['message' => 'Card(s) played successfully', 'hand' => $player->hand]);
     }
 

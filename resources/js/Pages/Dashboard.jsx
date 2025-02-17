@@ -9,6 +9,7 @@ const Dashboard = () => {
     const [showInviteInput, setShowInviteInput] = useState(false);
     const [queueTime, setQueueTime] = useState(null);
     const [queueCount, setQueueCount] = useState(0);
+    const [difficulty, setDifficulty] = useState('easy');
 
     const [isJoined, setIsJoined] = useState(false);
 
@@ -112,8 +113,7 @@ const Dashboard = () => {
 
     const handleCreateSoloGame = async () => {
         try {
-            const response = await axios.post("/game/createSolo");
-    
+            const response = await axios.post("/game/createSolo", { difficulty });
             if (response.data.redirect_url) {
                 window.location.href = response.data.redirect_url;
             }
@@ -122,7 +122,6 @@ const Dashboard = () => {
             alert("Failed to create solo game. Please try again.");
         }
     };
-
     const handleJoinByInviteCode = async () => {
         if (!inviteCode) {
             alert("Please enter a valid invite code.");
@@ -174,12 +173,23 @@ const Dashboard = () => {
                     >
                         Host Multiplayer Lobby
                     </button>
-                    <button
-                        onClick={handleCreateSoloGame}
-                        className="px-8 py-4 bg-gray-500/75 hover:bg-gray-600 text-white rounded-lg shadow-lg transform transition-transform hover:scale-110 focus:outline-none focus:ring-4 focus:ring-gray-500"
-                    >
-                        Make Solo Game
-                    </button>
+                    <div className="flex flex-col items-center gap-4 mb-6">
+                            <select
+                                value={difficulty}
+                                onChange={(e) => setDifficulty(e.target.value)}
+                                className="px-4 py-2 bg-gray-700 text-white rounded-lg"
+                            >
+                                <option value="easy">Easy</option>
+                                <option value="medium">Medium</option>
+                                <option value="hard">Hard</option>
+                            </select>
+                            <button
+                                onClick={handleCreateSoloGame}
+                                className="px-8 py-4 bg-gray-500/75 hover:bg-gray-600 text-white rounded-lg shadow-lg transform transition-transform hover:scale-110 focus:outline-none focus:ring-4 focus:ring-gray-500"
+                            >
+                                Start Solo Game
+                            </button>
+                        </div>
                     <button
                         onClick={() => setShowInviteInput(!showInviteInput)}
                         className="px-8 py-4 bg-gray-500/75 hover:bg-gray-600 text-white rounded-lg shadow-lg transform transition-transform hover:scale-110 focus:outline-none focus:ring-4 focus:ring-gray-500"

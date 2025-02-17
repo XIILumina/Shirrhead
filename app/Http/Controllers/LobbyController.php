@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\LobbyPlayer;
 use App\Models\Lobby;
 use App\Models\Game;
 use Illuminate\Http\Request;
@@ -39,29 +40,28 @@ class LobbyController extends Controller
     public function createLobby(Request $request)
     {
         try {
-            if (!Auth::check()) {
-                return redirect()->route('login'); // Redirect if not authenticated
-            }
-    
-            $inviteCode = Str::random(5);
             $userId = Auth::id();
-    
+            $inviteCode = Str::random(6);
+
+            // Create the lobby
             $lobby = Lobby::create([
                 'invite_code' => $inviteCode,
-                'status' => 'waiting for players',
-                'players' => json_encode([['id' => $userId, 'ready' => false]]),
+                'status' => 'waiting',
             ]);
-    
-            Log::info("Lobby created: " . $inviteCode);
-    
-            // Return the redirect URL for the frontend to handle
+
+            // Add the host to the lobby
+            LobbyPlayer::create([
+                'lobby_id' => $lobby->id,
+                'user_id' => $userId,
+                'ready' => false,
+            ]);
+
             return response()->json([
-                'message' => 'Lobby created',
+                'message' => 'Lobby created successfully',
                 'lobby' => $lobby,
-                'redirect_url' => route('lobby.view', ['inviteCode' => $lobby->invite_code]),
-            ], 201);
+                'redirect_url' => '/lobby/' . $lobby->invite_code,
+            ]);
         } catch (\Exception $e) {
-            Log::error('Error creating lobby: ' . $e->getMessage());
             return response()->json(['message' => 'Failed to create lobby'], 500);
         }
     }
@@ -69,59 +69,80 @@ class LobbyController extends Controller
     public function joinLobby(Request $request, $inviteCode)
     {
         try {
-            $userId = Auth::id(); // Use auth()->id() consistently
-            $lobby = Lobby::where('invite_code', $inviteCode)->firstOrFail();
-    
-            $players = json_decode($lobby->players, true) ?? [];
-    
-            // Check if the user is already in the lobby
-            if (in_array($userId, array_column($players, 'id'))) {
-                return response()->json(['message' => 'Already in lobby']);
+            $userId = Auth::id();
+            $lobby = Lobby::where('invite_code', $inviteCode)->first();
+
+            if (!$lobby) {
+                return response()->json(['message' => 'Invalid invite code'], 404);
             }
-    
-            // Add the new player to the lobby
-            $players[] = ['id' => $userId, 'ready' => false];
-            $lobby->players = json_encode($players);
-            $lobby->save();
-    
-            return response()->json(['message' => 'Joined lobby', 'lobby' => $lobby]);
+
+            if ($lobby->status !== 'waiting') {
+                return response()->json(['message' => 'Lobby is not open for joining'], 400);
+            }
+
+            // Check if the user is already in the lobby
+            if (LobbyPlayer::where('lobby_id', $lobby->id)->where('user_id', $userId)->exists()) {
+                return response()->json(['message' => 'You are already in this lobby'], 400);
+            }
+
+            // Add the user to the lobby
+            LobbyPlayer::create([
+                'lobby_id' => $lobby->id,
+                'user_id' => $userId,
+                'ready' => false,
+            ]);
+
+            return response()->json(['message' => 'Joined lobby successfully']);
         } catch (\Exception $e) {
-            Log::error('Error joining lobby: ' . $e->getMessage());
             return response()->json(['message' => 'Failed to join lobby'], 500);
         }
     }
+
     public function markReady(Request $request, $inviteCode)
     {
         try {
-            $userId = Auth::id(); 
-            $lobby = Lobby::where('invite_code', $inviteCode)->firstOrFail();
-            $players = json_decode($lobby->players, true) ?? [];
-    
-            // Update the player's ready status
-            foreach ($players as &$player) {
-                if ($player['id'] === $userId) {
-                    $player['ready'] = true;
-                    break;
-                }
+            $userId = Auth::id();
+            $lobby = Lobby::where('invite_code', $inviteCode)->first();
+
+            if (!$lobby) {
+                return response()->json(['message' => 'Lobby not found'], 404);
             }
-    
-            $lobby->players = json_encode($players);
-    
+
+            // Mark the player as ready
+            $lobbyPlayer = LobbyPlayer::where('lobby_id', $lobby->id)
+                ->where('user_id', $userId)
+                ->first();
+
+            if (!$lobbyPlayer) {
+                return response()->json(['message' => 'You are not part of this lobby'], 403);
+            }
+
+            $lobbyPlayer->update(['ready' => true]);
+
             // Check if all players are ready
-            $allReady = collect($players)->every(fn($p) => $p['ready']);
-    
-            if ($allReady && count($players) >= 2) {
-                $lobby->status = 'ready';
+            $allReady = LobbyPlayer::where('lobby_id', $lobby->id)
+                ->where('ready', false)
+                ->doesntExist();
+
+            if ($allReady && LobbyPlayer::where('lobby_id', $lobby->id)->count() >= 2) {
+                // Start the game
+                $gameController = app(GameController::class);
+                $game = $gameController->createGameFromLobby($lobby);
+
+                $lobby->update(['status' => 'started']);
+
+                return response()->json([
+                    'message' => 'Game started successfully',
+                    'game_id' => $game->id,
+                ]);
             }
-    
-            $lobby->save();
-    
-            return response()->json(['message' => 'Marked ready', 'lobby' => $lobby]);
+
+            return response()->json(['message' => 'Marked as ready']);
         } catch (\Exception $e) {
-            Log::error('Error marking ready: ' . $e->getMessage());
             return response()->json(['message' => 'Failed to mark ready'], 500);
         }
     }
+
     public function startGame($inviteCode)
     {
         try {

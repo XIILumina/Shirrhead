@@ -1,6 +1,8 @@
 <?php
 namespace App\Http\Controllers;
 
+use App\Models\Lobby;
+use App\Models\LobbyPlayer;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\Log;
@@ -112,59 +114,83 @@ class GameController extends Controller
 
 
 
-public function createSoloGame(Request $request)
-{
-    try {
-        $userId = Auth::id();
-
-        // Generate a unique invite code
-        $inviteCode = Str::random(6);
-
-        // Create the game
-        $game = Game::create([
-            'name' => 'Solo Game',
-            'status' => 'ongoing',
-            'cards' => json_encode([]),
-            'invite_code' => $inviteCode,
-            'start_time' => now(),
-        ]);
-
-        // Generate deck and shuffle it
-        $deck = $this->generateDeck();
-        shuffle($deck);
-
-        // Deal cards to the player
-        $hand = array_splice($deck, 0, 3);
-        $visible = array_splice($deck, 0, 3);
-        $hidden = array_splice($deck, 0, 3);
-
-        // Create the player
-        Player::create([
-            'user_id' => $userId,
-            'game_id' => $game->id,
-            'hand' => json_encode($hand),
-            'visible_cards' => json_encode($visible),
-            'hidden_cards' => json_encode($hidden),
-            'position' => 0,
-        ]);
-
-        // Set game state
-        $game->cards = json_encode([
-            'deck' => $deck, 
-            'pile' => [],
-        ]);
-        $game->save();
-
-        return response()->json([
-            'redirect_url' => '/game/' . $game->id,
-        ]);
-    } catch (\Exception $e) {
-        Log::error('Error creating solo game: ' . $e->getMessage());
-        return response()->json(['message' => 'Failed to create solo game'], 500);
+    public function createSoloGame(Request $request)
+    {
+        try {
+            $userId = Auth::id();
+            $difficulty = $request->input('difficulty', 'easy'); // Default to 'easy'
+    
+            // Generate a unique invite code
+            $inviteCode = Str::random(6);
+    
+            // Create the game
+            $game = Game::create([
+                'name' => 'Solo Game',
+                'status' => 'ongoing',
+                'cards' => json_encode([]),
+                'invite_code' => $inviteCode,
+                'start_time' => now(),
+            ]);
+    
+            // Generate deck and shuffle it
+            $deck = $this->generateDeck();
+            shuffle($deck);
+    
+            // Deal cards to the player
+            $hand = array_splice($deck, 0, 3);
+            $visible = array_splice($deck, 0, 3);
+            $hidden = array_splice($deck, 0, 3);
+    
+            // Create the player
+            Player::create([
+                'user_id' => $userId,
+                'game_id' => $game->id,
+                'hand' => json_encode($hand),
+                'visible_cards' => json_encode($visible),
+                'hidden_cards' => json_encode($hidden),
+                'position' => 0,
+            ]);
+    
+            // Add bots based on difficulty
+            $numBots = 1; // Default to easy (1 bot)
+            if ($difficulty === 'medium') {
+                $numBots = 2;
+            } elseif ($difficulty === 'hard') {
+                $numBots = 3;
+            }
+    
+            for ($i = 1; $i <= $numBots; $i++) {
+                // Deal cards to the bot
+                $botHand = array_splice($deck, 0, 3);
+                $botVisible = array_splice($deck, 0, 3);
+                $botHidden = array_splice($deck, 0, 3);
+    
+                Player::create([
+                    'user_id' => null, // Set user_id to null for bots
+                    'game_id' => $game->id,
+                    'hand' => json_encode($botHand),
+                    'visible_cards' => json_encode($botVisible),
+                    'hidden_cards' => json_encode($botHidden),
+                    'position' => $i,
+                    'is_bot' => true, // Add a flag to identify bots
+                ]);
+            }
+    
+            // Set game state
+            $game->cards = json_encode([
+                'deck' => $deck, 
+                'pile' => [],
+            ]);
+            $game->save();
+    
+            return response()->json([
+                'redirect_url' => '/game/' . $game->id,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error creating solo game: ' . $e->getMessage());
+            return response()->json(['message' => 'Failed to create solo game'], 500);
+        }
     }
-}
-
-
 
 
 
@@ -203,82 +229,71 @@ public function createSoloGame(Request $request)
 
 
     public function createGameFromLobby($lobby)
-{
-    try {
-        $game = Game::create([
-            'name' => 'Game from Lobby',
-            'status' => 'ongoing',
-            'cards' => json_encode($this->generateDeck()),
-            'invite_code' => $lobby->invite_code,
-        ]);
-
-        // Add all lobby players to the game
-        foreach ($lobby->players as $index => $player) {
-            Player::create([
-                'user_id' => $player['id'],
-                'game_id' => $game->id,
-                'hand' => json_encode([]),
-                'position' => $index,
+    {
+        try {
+            $game = Game::create([
+                'name' => 'Game from Lobby',
+                'status' => 'ongoing',
+                'cards' => json_encode($this->generateDeck()),
+                'invite_code' => $lobby->invite_code,
             ]);
+
+            // Add all lobby players to the game
+            $lobbyPlayers = LobbyPlayer::where('lobby_id', $lobby->id)->get();
+            foreach ($lobbyPlayers as $index => $lobbyPlayer) {
+                Player::create([
+                    'user_id' => $lobbyPlayer->user_id,
+                    'game_id' => $game->id,
+                    'hand' => json_encode([]),
+                    'position' => $index,
+                ]);
+            }
+
+            return $game;
+        } catch (\Exception $e) {
+            throw $e;
         }
-
-        return $game;
-    } catch (\Exception $e) {
-        Log::error('Error creating game from lobby: ' . $e->getMessage());
-        return response()->json(['message' => 'Failed to create game from lobby'], 500);
-    } 
-}
-
+    }
 
 
 
 
     // Join game by invite code
     public function joinGameByCode(Request $request)
-{
-    $userId = Auth::id();
-    $inviteCode = $request->input('invite_code');
+    {
+        $userId = Auth::id();
+        $inviteCode = $request->input('invite_code');
 
-    // Find the game by invite code
-    $game = Game::where('invite_code', $inviteCode)->first();
+        // Find the lobby by invite code
+        $lobby = Lobby::where('invite_code', $inviteCode)->first();
 
-    if (!$game) {
-        return response()->json(['message' => 'Invalid game invite code.'], 404);
+        if (!$lobby) {
+            return response()->json(['message' => 'Invalid lobby invite code.'], 404);
+        }
+
+        if ($lobby->status !== 'waiting') {
+            return response()->json(['message' => 'Cannot join this lobby, it has already started.'], 400);
+        }
+
+        // Ensure the player isn't already in the lobby
+        if (LobbyPlayer::where('lobby_id', $lobby->id)->where('user_id', $userId)->exists()) {
+            return response()->json(['message' => 'You are already in this lobby.'], 400);
+        }
+
+        $playerCount = LobbyPlayer::where('lobby_id', $lobby->id)->count();
+
+        if ($playerCount >= 4) {
+            return response()->json(['message' => 'Lobby is full.'], 400);
+        }
+
+        LobbyPlayer::create([
+            'lobby_id' => $lobby->id,
+            'user_id' => $userId,
+            'ready' => false,
+        ]);
+
+        return response()->json(['message' => 'Joined the lobby successfully']);
     }
-
-    if ($game->status !== 'pending') {
-        return response()->json(['message' => 'Cannot join this game, it has already started.'], 400);
-    }
-
-    // Ensure the player isn't already in the game
-    if (Player::where('game_id', $game->id)->where('user_id', $userId)->exists()) {
-        return response()->json(['message' => 'You are already in this game.'], 400);
-    }
-
-    $playerCount = Player::where('game_id', $game->id)->count();
-
-    if ($playerCount >= 4) {
-        return response()->json(['message' => 'Game is full.'], 400);
-    }
-
-    Player::create([
-        'user_id' => $userId,
-        'game_id' => $game->id,
-        'hand' => json_encode([]),
-        'visible_cards' => json_encode([]),
-        'hidden_cards' => json_encode([]),
-        'position' => $playerCount,
-    ]);
-
-    if ($playerCount + 1 >= 2) {
-        $game->update(['status' => 'ongoing']);
-    }
-
-    return Inertia::render('Game', [
-        'game' => $game,
-        'players' => Player::where('game_id', $game->id)->get(),
-    ]);
-}
 
     
 }

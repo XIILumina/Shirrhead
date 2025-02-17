@@ -73,19 +73,22 @@ const Game = ({ game, players }) => {
     fetchPlayerState();
   }, [game.id]);
 
-  const playCard = async (card) => {
-    setAnimatedCard(card);
-    setTimeout(async () => {
-      try {
-        const response = await axios.post(`/game/${game.id}/play-card`, { card });
-        setHand(response.data.hand);
-        setPile(response.data.pile);
-        setAnimatedCard(null);
-      } catch (err) {
-        alert(err.response.data.message);
-      }
-    }, 500); // Match the animation duration
-  };
+
+const playCard = async (card) => {
+  console.log("Card being played:", card); // Debugging
+  setAnimatedCard(card);
+  setTimeout(async () => {
+    try {
+      const response = await axios.post(`/game/${game.id}/play-card`, { card });
+      setHand(response.data.hand);
+      setPile(response.data.pile);
+      setAnimatedCard(null);
+    } catch (err) {
+      alert(err.response.data.message);
+    }
+  }, 500);
+};
+
 
   const pickUpPile = async () => {
     try {
@@ -99,104 +102,123 @@ const Game = ({ game, players }) => {
 
   const drawCard = async () => {
     try {
-      const response = await axios.post(`/game/${game.id}/draw-card`);
-      setHand(response.data.hand);
-      setDeckCount((prev) => prev - 1);
+        const response = await axios.post(`/game/${game.id}/draw-card`);
+        setHand(response.data.hand);
+        setDeckCount((prev) => prev - 1);
+
+        // Trigger animation
+        setAnimatedCard(response.data.card);
+        setTimeout(() => {
+            setAnimatedCard(null);
+        }, 500); // Match the animation duration
     } catch (err) {
-      console.error("Error drawing card:", err);
+        console.error("Error drawing card:", err);
     }
-  };
+};
 
   return (
     <div className="min-h-screen bg-green-900 text-white flex flex-col justify-between p-4">
-      {/* Enemy Section */}
-      <div className="flex flex-col items-center">
-        <h2 className="text-xl mb-4">Enemy's Cards</h2>
+  {/* Enemy Section */}
+<div className="flex flex-col items-center">
+  <h2 className="text-xl mb-4">Enemy's Cards</h2>
+  {players
+    .filter((player) => player.is_bot)
+    .map((bot, index) => (
+      <div key={index} className="mb-4">
+        <h3 className="text-lg mb-2">Bot {index + 1}</h3>
         <div className="flex space-x-2">
-          {enemyVisibleCards.map((card, index) => (
+          {bot.visible_cards.map((card, cardIndex) => (
             <img
-              key={index}
+              key={cardIndex}
               src={`/images/cards/${card.value}_of_${card.suit}.png`}
               alt={`${card.value} of ${card.suit}`}
-              className="w-16 h-24 transform hover:scale-110 transition-transform"
-            />
-          ))}
-        </div>
-        <div className="mt-4">
-          <h3>Enemy's Deck</h3>
-          <img
-            src="/images/cards/back.png"
-            alt="Enemy Deck"
-            className="w-16 h-24"
-          />
-        </div>
-      </div>
-
-      {/* Pile Section */}
-      <div className="flex justify-center">
-        <div className="relative">
-          {pile.map((card, index) => (
-            <img
-              key={index}
-              src={`/images/cards/${card.value}_of_${card.suit}.png`}
-              alt={`${card.value} of ${card.suit}`}
-              className="w-16 h-24 absolute"
-              style={{
-                transform: `rotate(${index * 10 - (pile.length * 5)}deg) translateY(${index * 5}px)`,
-              }}
+              className="w-24 h-36 transform hover:scale-110 transition-transform"
             />
           ))}
         </div>
       </div>
+    ))}
+</div>
 
-      {/* Player Section */}
-      <div className="flex flex-col items-center">
-        <h2 className="text-xl mb-4">Your Cards</h2>
-        <div className="flex space-x-2">
-          {hand.map((card, index) => (
-            <button
-              key={index}
-              onClick={() => playCard(card)}
-              className={`transform hover:scale-110 transition-transform ${
-                animatedCard === card ? "card-animation" : ""
-              }`}
-            >
-              <img
-                src={`/images/cards/${card.value}_of_${card.suit}.png`}
-                alt={`${card.value} of ${card.suit}`}
-                className="w-16 h-24"
-              />
-            </button>
-          ))}
-        </div>
-        <div className="mt-4">
-          <h3>Visible Cards</h3>
-          <div className="flex space-x-2">
-            {visibleCards.map((card, index) => (
-              <img
-                key={index}
-                src={`/images/cards/${card.value}_of_${card.suit}.png`}
-                alt={`${card.value} of ${card.suit}`}
-                className="w-16 h-24"
-              />
-            ))}
-          </div>
-        </div>
-        <div className="mt-4">
-          <h3>Hidden Cards</h3>
-          <div className="flex space-x-2">
-            {hiddenCards.map((_, index) => (
-              <img
-                key={index}
-                src="/images/cards/back.png"
-                alt="Hidden Card"
-                className="w-16 h-24"
-              />
-            ))}
-          </div>
-        </div>
-      </div>
+  {/* Pile Section */}
+  <div className="flex justify-center">
+    <div className="relative">
+      {pile.map((card, index) => (
+        <img
+          key={index}
+          src={`/images/cards/${card.value}_of_${card.suit}.png`}
+          alt={`${card.value} of ${card.suit}`}
+          className="w-24 h-36 absolute"
+          style={{
+            transform: `rotate(${index * 10 - (pile.length * 5)}deg) translateY(${index * 5}px)`,
+          }}
+        />
+      ))}
     </div>
+  </div>
+
+  <div className="flex justify-center">
+  <button
+    onClick={drawCard}
+    className="px-8 py-4 bg-gray-500/75 hover:bg-gray-600 text-white rounded-lg shadow-lg transform transition-transform hover:scale-110 focus:outline-none focus:ring-4 focus:ring-gray-500"
+  >
+    Draw Card
+  </button>
+</div>
+
+
+  {/* Player Section */}
+  <div className="flex flex-col items-center">
+  <h2 className="text-xl mb-4">Your Cards</h2>
+  <div className="flex space-x-2">
+    {hand.map((card, index) => (
+      <button
+        key={index}
+        onClick={() => playCard(card)}
+        className={`transform hover:scale-110 transition-transform ${
+          animatedCard === card ? "card-animation" : ""
+        }`}
+      >
+        <img
+          src={`/images/cards/${card.value}_of_${card.suit}.png`}
+          alt={`${card.value} of ${card.suit}`}
+          className="w-24 h-36"
+        />
+      </button>
+    ))}
+  </div>
+  <div className="mt-4">
+    <h3>Visible Cards</h3>
+    <div className="flex space-x-2 relative">
+      {visibleCards.map((card, index) => (
+        <img
+          key={index}
+          src={`/images/cards/${card.value}_of_${card.suit}.png`}
+          alt={`${card.value} of ${card.suit}`}
+          className="w-24 h-36 absolute"
+          style={{
+            transform: `translateX(${index * 20}px)`,
+            zIndex: index + 1,
+          }}
+        />
+      ))}
+    </div>
+  </div>
+  <div className="mt-4">
+    <h3>Hidden Cards</h3>
+    <div className="flex space-x-2">
+      {hiddenCards.map((_, index) => (
+        <img
+          key={index}
+          src="/images/cards/back.png"
+          alt="Hidden Card"
+          className="w-36 h-48" // Larger size for hidden cards
+        />
+      ))}
+    </div>
+  </div>
+</div>
+</div>
   );
 };
 

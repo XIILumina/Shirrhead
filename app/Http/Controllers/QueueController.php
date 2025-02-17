@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Queue;
+use App\Models\Lobby;
+use App\Models\LobbyPlayer;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Http\Request;
 
@@ -50,8 +52,22 @@ class QueueController extends Controller
         $queueCount = Queue::count();
 
         if ($queueCount >= 2) {
-            // If there are enough players, create a game (you can improve this with events)
-            app(GameController::class)->createGame();
+            // If there are enough players, create a lobby
+            $lobby = Lobby::create(['status' => 'waiting']);
+
+            // Add players to the lobby
+            $playersInQueue = Queue::limit(4)->get();
+            foreach ($playersInQueue as $queueEntry) {
+                LobbyPlayer::create([
+                    'lobby_id' => $lobby->id,
+                    'user_id' => $queueEntry->user_id,
+                    'ready' => false,
+                ]);
+                $queueEntry->delete(); // Remove from queue
+            }
+
+            // Start countdown
+            $this->startCountdown($lobby->id);
         }
 
         return response()->json(['message' => 'Joined the queue successfully']);
@@ -71,5 +87,31 @@ class QueueController extends Controller
         }
 
         return response()->json(['message' => 'You are not in the queue.'], 400);
+    }
+
+    private function startCountdown($lobbyId)
+    {
+        // Simulate a 5-second countdown
+        sleep(5);
+
+        // Check if all players are ready
+        $lobby = Lobby::find($lobbyId);
+        $players = LobbyPlayer::where('lobby_id', $lobbyId)->get();
+
+        $allReady = true;
+        foreach ($players as $player) {
+            if (!$player->ready) {
+                $allReady = false;
+                break;
+            }
+        }
+
+        if ($allReady) {
+            // Create the game
+            app(GameController::class)->createGameFromLobby($lobby);
+        } else {
+            // Handle not all players ready case
+            $lobby->update(['status' => 'cancelled']);
+        }
     }
 }

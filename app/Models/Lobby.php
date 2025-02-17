@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+
 use Illuminate\Database\Eloquent\Model;
 class Lobby extends Model
 {
@@ -20,5 +21,10 @@ class Lobby extends Model
     public function setPlayersAttribute($value)
     {
         $this->attributes['players'] = json_encode($value);
+    
+    }
+    public function players()
+    {
+        return $this->hasMany(LobbyPlayer::class);
     }
 }
