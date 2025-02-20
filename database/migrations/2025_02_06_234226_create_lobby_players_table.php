@@ -15,14 +15,10 @@ class CreateLobbyPlayersTable extends Migration
     {
         Schema::create('lobby_players', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('lobby_id'); // Foreign key to the lobby
-            $table->unsignedBigInteger('user_id');  // Foreign key to the user
-            $table->boolean('ready')->default(false); // Ready state of the player
+            $table->foreignId('lobby_id')->constrained()->onDelete('cascade');
+            $table->foreignId('user_id')->constrained()->onDelete('cascade');
+            $table->boolean('ready')->default(false);
             $table->timestamps();
-
-            // Foreign key constraints
-            $table->foreign('lobby_id')->references('id')->on('lobbies')->onDelete('cascade');
-            $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
         });
     }
 

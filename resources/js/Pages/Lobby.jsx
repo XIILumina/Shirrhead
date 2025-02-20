@@ -1,39 +1,48 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 
-const Lobby = ({ lobby, players, inviteCode }) => {
+const Lobby = ({ lobby, players: initialPlayers, inviteCode }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [lobbyState, setLobbyState] = useState(lobby);
-  const [lobby, setLobby] = useState(null);
-  const [players, setPlayers] = useState([]);
-
-  // Ensure players is always an array
-  const lobbyPlayers = lobbyState?.players ? JSON.parse(lobbyState.players) : players || [];
+  const [lobbyState, setLobbyState] = useState(lobby || {});
+  const [playersState, setPlayersState] = useState(initialPlayers || []);
 
   useEffect(() => {
+    console.log("Component mounted or updated");
+
     const fetchLobby = async () => {
-        try {
-            const response = await axios.get(`/lobby/${inviteCode}`);
-            setLobby(response.data.lobby);
-            setPlayers(response.data.players);
-        } catch (err) {
-            console.error("Error fetching lobby:", err);
-        }
+      try {
+        const response = await axios.get(`/lobby/${inviteCode}`);
+        console.log("Fetched lobby data:", response.data); // Debugging log
+        setLobbyState(response.data.lobby || {});
+        setPlayersState(response.data.players || []);
+      } catch (err) {
+        console.error("Error fetching lobby:", err);
+      }
     };
 
     fetchLobby();
-}, [inviteCode]);
+    const interval = setInterval(fetchLobby, 2000);
 
-const markReady = async () => {
+    return () => {
+      console.log("Component unmounted");
+      clearInterval(interval);
+    };
+  }, [inviteCode]);
+
+  useEffect(() => {
+    console.log("Players state updated:", playersState); // Debugging log
+  }, [playersState]);
+
+  const markReady = async () => {
     try {
-        await axios.post(`/lobby/${inviteCode}/ready`);
-        const response = await axios.get(`/lobby/${inviteCode}`);
-        setLobby(response.data.lobby);
+      await axios.post(`/lobby/${inviteCode}/ready`);
+      const response = await axios.get(`/lobby/${inviteCode}`);
+      setLobbyState(response.data.lobby);
     } catch (err) {
-        console.error("Error marking ready:", err);
+      console.error("Error marking ready:", err);
     }
-};
+  };
 
   const startGame = async () => {
     try {
@@ -54,7 +63,7 @@ const markReady = async () => {
 
       {/* Players List */}
       <div className="players mb-6">
-        {players.map((player, index) => (
+        {playersState.map((player, index) => (
           <div key={index} className="player bg-gray-700 p-4 rounded-lg mb-2">
             <span className="text-white">
               {player.name} - {player.ready ? "✅ Ready" : "❌ Not Ready"}
@@ -64,7 +73,7 @@ const markReady = async () => {
       </div>
 
       {/* Empty Slots */}
-      {[...Array(4 - lobbyPlayers.length)].map((_, index) => (
+      {[...Array(4 - playersState.length)].map((_, index) => (
         <div key={index} className="empty-slot bg-gray-700 p-4 rounded-lg mb-2">
           <span className="text-gray-400">Empty Slot</span>
         </div>

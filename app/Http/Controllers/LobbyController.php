@@ -36,67 +36,77 @@ class LobbyController extends Controller
             'inviteCode' => $inviteCode,
         ]);
     }
-
     public function createLobby(Request $request)
-    {
-        try {
-            $userId = Auth::id();
-            $inviteCode = Str::random(6);
+{
+    $request->validate([
+        'name' => 'nullable|string|max:255',
+    ]);
 
-            // Create the lobby
-            $lobby = Lobby::create([
-                'invite_code' => $inviteCode,
-                'status' => 'waiting',
-            ]);
+    try {
+        $userId = Auth::id();
+        $inviteCode = Str::random(6);
 
-            // Add the host to the lobby
-            LobbyPlayer::create([
-                'lobby_id' => $lobby->id,
-                'user_id' => $userId,
-                'ready' => false,
-            ]);
+        // Create the lobby
+        $lobby = Lobby::create([
+            'invite_code' => $inviteCode,
+            'status' => 'waiting',
+            'players' => json_encode([['id' => $userId, 'ready' => false]]), // Add the host to the players field
+        ]);
 
-            return response()->json([
-                'message' => 'Lobby created successfully',
-                'lobby' => $lobby,
-                'redirect_url' => '/lobby/' . $lobby->invite_code,
-            ]);
-        } catch (\Exception $e) {
-            return response()->json(['message' => 'Failed to create lobby'], 500);
-        }
+        // Add the host to the lobby_players table
+        LobbyPlayer::create([
+            'lobby_id' => $lobby->id,
+            'user_id' => $userId,
+            'ready' => false,
+        ]);
+
+        return response()->json([
+            'message' => 'Lobby created successfully',
+            'lobby' => $lobby,
+            'redirect_url' => '/lobby/' . $lobby->invite_code,
+        ]);
+    } catch (\Exception $e) {
+        Log::error('Error creating lobby: ' . $e->getMessage());
+        return response()->json(['message' => 'Failed to create lobby'], 500);
     }
+}
 
-    public function joinLobby(Request $request, $inviteCode)
-    {
-        try {
-            $userId = Auth::id();
-            $lobby = Lobby::where('invite_code', $inviteCode)->first();
+public function joinLobby(Request $request, $inviteCode)
+{
+    try {
+        $userId = Auth::id();
+        $lobby = Lobby::where('invite_code', $inviteCode)->first();
 
-            if (!$lobby) {
-                return response()->json(['message' => 'Invalid invite code'], 404);
-            }
-
-            if ($lobby->status !== 'waiting') {
-                return response()->json(['message' => 'Lobby is not open for joining'], 400);
-            }
-
-            // Check if the user is already in the lobby
-            if (LobbyPlayer::where('lobby_id', $lobby->id)->where('user_id', $userId)->exists()) {
-                return response()->json(['message' => 'You are already in this lobby'], 400);
-            }
-
-            // Add the user to the lobby
-            LobbyPlayer::create([
-                'lobby_id' => $lobby->id,
-                'user_id' => $userId,
-                'ready' => false,
-            ]);
-
-            return response()->json(['message' => 'Joined lobby successfully']);
-        } catch (\Exception $e) {
-            return response()->json(['message' => 'Failed to join lobby'], 500);
+        if (!$lobby) {
+            return response()->json(['message' => 'Invalid invite code'], 404);
         }
+
+        if ($lobby->status !== 'waiting') {
+            return response()->json(['message' => 'Lobby is not open for joining'], 400);
+        }
+
+        // Check if the user is already in the lobby
+        if (LobbyPlayer::where('lobby_id', $lobby->id)->where('user_id', $userId)->exists()) {
+            return response()->json(['message' => 'You are already in this lobby'], 400);
+        }
+
+        // Add the user to the lobby_players table
+        LobbyPlayer::create([
+            'lobby_id' => $lobby->id,
+            'user_id' => $userId,
+            'ready' => false,
+        ]);
+
+        // Update the players field in the lobbies table
+        $players = json_decode($lobby->players, true) ?? [];
+        $players[] = ['id' => $userId, 'ready' => false];
+        $lobby->update(['players' => json_encode($players)]);
+
+        return response()->json(['message' => 'Joined lobby successfully']);
+    } catch (\Exception $e) {
+        return response()->json(['message' => 'Failed to join lobby'], 500);
     }
+}
 
     public function markReady(Request $request, $inviteCode)
     {
@@ -164,4 +174,4 @@ class LobbyController extends Controller
             return response()->json(['message' => 'Failed to start game'], 500);
         }
     }
-}
+}   

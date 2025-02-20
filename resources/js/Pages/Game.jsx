@@ -49,18 +49,17 @@ const Game = ({ game, players }) => {
         enemy_visible_cards,
       } = response.data;
 
-      setHand(hand);
-      setVisibleCards(visible_cards);
-      setHiddenCards(hidden_cards);
-      setPile(pile);
-      setDeckCount(deck.length);
+      setHand(Array.isArray(hand) ? hand : []);
+      setVisibleCards(Array.isArray(visible_cards) ? visible_cards : []);
+      setHiddenCards(Array.isArray(hidden_cards) ? hidden_cards : []);
+      setPile(Array.isArray(pile) ? pile : []);
+      setDeckCount(Array.isArray(deck) ? deck.length : 0);
       setPlayerTurn(turn);
-      setEnemyVisibleCards(enemy_visible_cards);
+      setEnemyVisibleCards(Array.isArray(enemy_visible_cards) ? enemy_visible_cards : []);
     } catch (err) {
       console.error("Error fetching game state:", err);
     }
   };
-
   useEffect(() => {
     const timer = setInterval(() => {
       setTimeElapsed((prevTime) => prevTime + 1);
@@ -74,20 +73,20 @@ const Game = ({ game, players }) => {
   }, [game.id]);
 
 
-const playCard = async (card) => {
-  console.log("Card being played:", card); // Debugging
-  setAnimatedCard(card);
-  setTimeout(async () => {
-    try {
-      const response = await axios.post(`/game/${game.id}/play-card`, { card });
-      setHand(response.data.hand);
-      setPile(response.data.pile);
-      setAnimatedCard(null);
-    } catch (err) {
-      alert(err.response.data.message);
-    }
-  }, 500);
-};
+  const playCard = async (card) => {
+    console.log("Card being played:", card); // Debugging
+    setAnimatedCard(card);
+    setTimeout(async () => {
+      try {
+        const response = await axios.post(`/game/${game.id}/play-card`, { card });
+        setHand(response.data.hand);
+        setPile(response.data.pile);
+        setAnimatedCard(null);
+      } catch (err) {
+        alert(err.response.data.message);
+      }
+    }, 500);
+  };
 
 
   const pickUpPile = async () => {

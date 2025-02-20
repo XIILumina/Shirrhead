@@ -100,16 +100,16 @@ const Dashboard = () => {
 
     const handleCreateLobby = async () => {
         try {
-            const response = await axios.post("/lobby/create");
-    
-            if (response.data.redirect_url) {
-                // Redirect the user to the lobby view
-                window.location.href = response.data.redirect_url;
-            }
+          const response = await axios.post("/lobby/create");
+      
+          if (response.data.redirect_url) {
+            window.location.href = response.data.redirect_url;
+          }
         } catch (error) {
-            console.error("Error creating lobby:", error);
+          console.error("Error creating lobby:", error);
+          alert("Failed to create lobby. Please try again.");
         }
-    };
+      };
 
     const handleCreateSoloGame = async () => {
         try {
