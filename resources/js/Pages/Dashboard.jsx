@@ -1,242 +1,303 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
+import { motion } from "framer-motion";
 
 const Dashboard = () => {
-    const [queueStatus, setQueueStatus] = useState("Not in queue");
-    const [inQueue, setInQueue] = useState(false);
-    const [inviteCode, setInviteCode] = useState("");
-    const [showInviteInput, setShowInviteInput] = useState(false);
-    const [queueTime, setQueueTime] = useState(null);
-    const [queueCount, setQueueCount] = useState(0);
-    const [difficulty, setDifficulty] = useState('easy');
+  const [queueStatus, setQueueStatus] = useState("Not in queue");
+  const [inQueue, setInQueue] = useState(false);
+  const [inviteCode, setInviteCode] = useState("");
+  const [showInviteInput, setShowInviteInput] = useState(false);
+  const [queueTime, setQueueTime] = useState(null);
+  const [queueCount, setQueueCount] = useState(0);
+  const [difficulty, setDifficulty] = useState("easy");
+  const [isJoined, setIsJoined] = useState(false);
 
-    const [isJoined, setIsJoined] = useState(false);
+  // Animation variants
+  const containerVariants = {
+    hidden: { opacity: 0, y: 50 },
+    visible: { 
+      opacity: 1, 
+      y: 0, 
+      transition: { 
+        duration: 0.8, 
+        ease: "easeOut", 
+        staggerChildren: 0.2 
+      }
+    }
+  };
 
-    useEffect(() => {
-        const storedQueueStatus = localStorage.getItem("queueStatus");
-        const storedInQueue = localStorage.getItem("inQueue");
-        const storedIsJoined = localStorage.getItem("isJoined");
+  const itemVariants = {
+    hidden: { opacity: 0, scale: 0.8 },
+    visible: { 
+      opacity: 1, 
+      scale: 1, 
+      transition: { type: "spring", stiffness: 200, damping: 15 }
+    }
+  };
 
-        if (storedInQueue === "true") {
-            setInQueue(true);
-            setQueueStatus(storedQueueStatus || "Not in queue");
-        }
+  const buttonVariants = {
+    hover: { scale: 1.1, rotate: 2 },
+    tap: { scale: 0.95 }
+  };
 
-        if (storedIsJoined === "true") {
-            setIsJoined(true);
-        }
-    }, []);
+  useEffect(() => {
+    const storedQueueStatus = localStorage.getItem("queueStatus");
+    const storedInQueue = localStorage.getItem("inQueue");
+    const storedIsJoined = localStorage.getItem("isJoined");
 
-    // Функция для проверки статуса очереди
-    const checkQueueStatus = async () => {
-        try {
-            const response = await axios.get("/queue/status");
-            setInQueue(response.data.in_queue);
-            setQueueStatus(response.data.message || "Not in queue");
-            setQueueCount(response.data.queue_count); // Обновляем количество людей в очереди
-            setQueueTime(response.data.queue_time);
+    if (storedInQueue === "true") {
+      setInQueue(true);
+      setQueueStatus(storedQueueStatus || "Not in queue");
+    }
+    if (storedIsJoined === "true") {
+      setIsJoined(true);
+    }
+  }, []);
 
-            // Сохраняем данные в localStorage
-            localStorage.setItem("queueStatus", response.data.message || "Not in queue");
-            localStorage.setItem("inQueue", response.data.in_queue.toString());
-        } catch (error) {
-            console.error("Error checking queue status:", error);
-        }
-    };
+  useEffect(() => {
+    checkQueueStatus();
+    const interval = setInterval(() => {
+      checkQueueStatus();
+    }, 5000); // Check every 5 seconds
+    return () => clearInterval(interval);
+  }, []);
 
-    // Используем useEffect для первоначальной проверки статуса очереди
-    useEffect(() => {
-        checkQueueStatus();
-    }, []);
+  const checkQueueStatus = async () => {
+    try {
+      const response = await axios.get("/queue/status");
+      setInQueue(response.data.in_queue);
+      setQueueStatus(response.data.message || "Not in queue");
+      setQueueCount(response.data.queue_count);
+      setQueueTime(response.data.queue_time);
+      localStorage.setItem("queueStatus", response.data.message || "Not in queue");
+      localStorage.setItem("inQueue", response.data.in_queue.toString());
+    } catch (error) {
+      console.error("Error checking queue status:", error);
+    }
+  };
 
-    // Функция для обновления информации о очереди
-    useEffect(() => {
-        const fetchQueue = async () => {
-            try {
-                const response = await axios.get("/queue");
-                setQueueCount(response.data.queue_count); // Обновляем количество людей в очереди
-                setQueueTime(response.data.queue_time);
-            } catch (error) {
-                console.error("Error fetching queue:", error);
-            }
-        };
+  const handleJoinQueue = async () => {
+    try {
+      const response = await axios.post("/queue/join");
+      setQueueStatus(response.data.message);
+      setInQueue(true);
+      setIsJoined(true);
+      localStorage.setItem("queueStatus", response.data.message);
+      localStorage.setItem("inQueue", "true");
+      localStorage.setItem("isJoined", "true");
+    } catch (error) {
+      setQueueStatus(error.response?.data?.message || "An error occurred.");
+    }
+  };
 
-        const interval = setInterval(fetchQueue, 1000);
-        return () => clearInterval(interval);
-    }, []);
+  const handleLeaveQueue = async () => {
+    try {
+      const response = await axios.post("/queue/leave");
+      setQueueStatus(response.data.message);
+      setInQueue(false);
+      setIsJoined(false);
+      localStorage.setItem("queueStatus", response.data.message);
+      localStorage.setItem("inQueue", "false");
+      localStorage.setItem("isJoined", "false");
+    } catch (error) {
+      setQueueStatus(error.response?.data?.message || "An error occurred.");
+    }
+  };
 
-    const handleJoinQueue = async () => {
-        try {
-            const response = await axios.post("/queue/join");
-            setQueueStatus(response.data.message);
-            setInQueue(true);
-            setIsJoined(true);
+  const handleCreateLobby = async () => {
+    try {
+      const response = await axios.post("/lobby/create");
+      if (response.data.redirect_url) {
+        window.location.href = response.data.redirect_url;
+      }
+    } catch (error) {
+      console.error("Error creating lobby:", error);
+      alert("Failed to create lobby.");
+    }
+  };
 
-            // Сохраняем данные в localStorage
-            localStorage.setItem("queueStatus", response.data.message);
-            localStorage.setItem("inQueue", "true");
-            localStorage.setItem("isJoined", "true");
-        } catch (error) {
-            setQueueStatus(error.response?.data?.message || "An error occurred.");
-        }
-    };
-
-    const handleLeaveQueue = async () => {
-        try {
-            const response = await axios.post("/queue/leave");
-            setQueueStatus(response.data.message);
-            setInQueue(false);
-            setIsJoined(false);
-
-            // Сохраняем данные в localStorage
-            localStorage.setItem("queueStatus", response.data.message);
-            localStorage.setItem("inQueue", "false");
-            localStorage.setItem("isJoined", "false");
-        } catch (error) {
-            setQueueStatus(error.response?.data?.message || "An error occurred.");
-        }
-    };
-
-    const handleCreateLobby = async () => {
-        try {
-          const response = await axios.post("/lobby/create");
-      
-          if (response.data.redirect_url) {
+  const handleCreateSoloGame = async () => {
+    try {
+        const response = await axios.post("/game/createSolo", { difficulty });
+        console.log("Solo game creation response:", response.data); // Log the response
+        localStorage.setItem("lastSoloGameId", response.data.redirect_url.split('/').pop());
+        if (response.data.redirect_url) {
             window.location.href = response.data.redirect_url;
-          }
-        } catch (error) {
-          console.error("Error creating lobby:", error);
-          alert("Failed to create lobby. Please try again.");
         }
-      };
+    } catch (error) {
+        console.error("Error creating solo game:", error.response?.data || error);
+        alert("Failed to create solo game: " + (error.response?.data?.message || "Unknown error"));
+    }
+}
 
-    const handleCreateSoloGame = async () => {
-        try {
-            const response = await axios.post("/game/createSolo", { difficulty });
-            if (response.data.redirect_url) {
-                window.location.href = response.data.redirect_url;
-            }
-        } catch (error) {
-            console.error("Error creating solo game:", error);
-            alert("Failed to create solo game. Please try again.");
-        }
-    };
-    const handleJoinByInviteCode = async () => {
-        if (!inviteCode) {
-            alert("Please enter a valid invite code.");
-            return;
-        }
+  const handleJoinByInviteCode = async () => {
+    if (!inviteCode) {
+      alert("Please enter a valid invite code.");
+      return;
+    }
+    try {
+      const response = await axios.post("/lobby/join", { invite_code: inviteCode });
+      if (response.data.redirect_url) {
+        window.location.href = response.data.redirect_url;
+      }
+    } catch (error) {
+      console.error("Error joining lobby:", error);
+      alert("Failed to join lobby: " + (error.response?.data?.message || "Invalid invite code"));
+    }
+  };
 
-        try {
-            const response = await axios.post("/lobby/join", {
-                invite_code: inviteCode,
-            });
-            if (response.data.success) {
-                window.location.href = `/lobby/${response.data.game_id}`;
-            } else {
-                alert("Failed to join the lobby. Invalid invite code.");
-            }
-        } catch (error) {
-            console.error("Error joining Lobby:", error);
-            alert("An error occurred while joining the Lobby.");
-        }
-    };
+  return (
+    <AuthenticatedLayout>
+      <motion.div 
+        className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-800 flex items-center justify-center p-8 relative overflow-hidden"
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+      >
+        {/* Animated Background Elements */}
+        <motion.div 
+          className="absolute w-96 h-96 bg-purple-500/20 rounded-full blur-3xl"
+          animate={{ scale: [1, 1.2, 1], rotate: 360 }}
+          transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
+          style={{ top: "-10%", left: "-10%" }}
+        />
+        <motion.div 
+          className="absolute w-72 h-72 bg-blue-500/20 rounded-full blur-3xl"
+          animate={{ scale: [1, 1.1, 1], rotate: -360 }}
+          transition={{ duration: 12, repeat: Infinity, ease: "linear" }}
+          style={{ bottom: "-5%", right: "-5%" }}
+        />
 
-    return (
-        <AuthenticatedLayout>
-            <div className="bg-gray-900 text-white p-8 rounded-xl relative">
-                <h1 className="text-4xl text-center mb-4">
-                    Welcome to Shithead!
-                </h1>
-                <p
-                    className={`text-xl text-center mb-6 ${
-                        inQueue ? "text-yellow-400" : "text-green-500"
-                    }`}
-                >
-                    {queueStatus}
-                </p>
+        <motion.div 
+          className="bg-gray-900/80 backdrop-blur-md rounded-xl p-8 shadow-2xl w-full max-w-lg border border-gray-700/50"
+          variants={itemVariants}
+        >
+          <motion.h1 
+            className="text-5xl font-extrabold text-center mb-6 bg-gradient-to-r from-purple-400 to-blue-500 bg-clip-text text-transparent"
+            variants={itemVariants}
+          >
+            Welcome to Shithead!
+          </motion.h1>
 
-                {/* Кнопки расположены вертикально по центру с полупрозрачным серым цветом */}
-                <div className="flex flex-col items-center gap-4 mb-6">
-                    {!isJoined && (
-                        <button
-                            onClick={handleJoinQueue}
-                            className="px-8 py-4 bg-gray-500/75 hover:bg-gray-600 text-white rounded-lg shadow-lg transform transition-transform hover:scale-110 focus:outline-none focus:ring-4 focus:ring-gray-500"
-                        >
-                            Join Quick Match
-                        </button>
-                    )}
-                    <button
-                        onClick={handleCreateLobby}
-                        className="px-8 py-4 bg-gray-500/75 hover:bg-gray-600 text-white rounded-lg shadow-lg transform transition-transform hover:scale-110 focus:outline-none focus:ring-4 focus:ring-gray-500"
-                    >
-                        Host Multiplayer Lobby
-                    </button>
-                    <div className="flex flex-col items-center gap-4 mb-6">
-                            <select
-                                value={difficulty}
-                                onChange={(e) => setDifficulty(e.target.value)}
-                                className="px-4 py-2 bg-gray-700 text-white rounded-lg"
-                            >
-                                <option value="easy">Easy</option>
-                                <option value="medium">Medium</option>
-                                <option value="hard">Hard</option>
-                            </select>
-                            <button
-                                onClick={handleCreateSoloGame}
-                                className="px-8 py-4 bg-gray-500/75 hover:bg-gray-600 text-white rounded-lg shadow-lg transform transition-transform hover:scale-110 focus:outline-none focus:ring-4 focus:ring-gray-500"
-                            >
-                                Start Solo Game
-                            </button>
-                        </div>
-                    <button
-                        onClick={() => setShowInviteInput(!showInviteInput)}
-                        className="px-8 py-4 bg-gray-500/75 hover:bg-gray-600 text-white rounded-lg shadow-lg transform transition-transform hover:scale-110 focus:outline-none focus:ring-4 focus:ring-gray-500"
-                    >
-                        {showInviteInput
-                            ? "Close Invite Input"
-                            : "Join by Invite Code"}
-                    </button>
-                </div>
+          <motion.p 
+            className={`text-xl text-center mb-8 ${inQueue ? "text-yellow-400" : "text-green-400"}`}
+            variants={itemVariants}
+            animate={{ y: [0, -5, 0] }}
+            transition={{ repeat: Infinity, duration: 2 }}
+          >
+            {queueStatus}
+          </motion.p>
 
-                {/* Join by Invite Code */}
-                {showInviteInput && (
-                    <div className="mt-8 text-center">
-                        <h2 className="text-2xl mb-4">Enter Invite Code</h2>
-                        <input
-                            type="text"
-                            value={inviteCode}
-                            onChange={(e) => setInviteCode(e.target.value)}
-                            placeholder="Enter invite code"
-                            className="px-6 py-3 rounded-lg bg-gray-700 text-white border-none mb-4 focus:ring-2 focus:ring-purple-500"
-                        />
-                        <button
-                            onClick={handleJoinByInviteCode}
-                            className="px-8 py-4 bg-purple-600 hover:bg-purple-700 text-white rounded-lg shadow-lg transform transition-transform hover:scale-110 focus:outline-none focus:ring-4 focus:ring-purple-500"
-                        >
-                            Join Lobby
-                        </button>
-                    </div>
-                )}
+          {/* Buttons */}
+          <motion.div className="flex flex-col items-center gap-4" variants={itemVariants}>
+            {!isJoined && (
+              <motion.button
+                onClick={handleJoinQueue}
+                className="w-64 py-4 bg-gradient-to-r from-blue-600 to-blue-800 text-white rounded-lg shadow-lg hover:shadow-xl"
+                variants={buttonVariants}
+                whileHover="hover"
+                whileTap="tap"
+              >
+                Join Quick Match
+              </motion.button>
+            )}
+            <motion.button
+              onClick={handleCreateLobby}
+              className="w-64 py-4 bg-gradient-to-r from-purple-600 to-purple-800 text-white rounded-lg shadow-lg hover:shadow-xl"
+              variants={buttonVariants}
+              whileHover="hover"
+              whileTap="tap"
+            >
+              Host Multiplayer
+            </motion.button>
+            <motion.div className="flex flex-col items-center gap-2" variants={itemVariants}>
+              <select
+                value={difficulty}
+                onChange={(e) => setDifficulty(e.target.value)}
+                className="w-64 py-2 px-4 bg-gray-800 text-white rounded-lg border border-gray-600 focus:ring-2 focus:ring-purple-500"
+              >
+                <option value="easy">Easy</option>
+                <option value="medium">Medium</option>
+                <option value="hard">Hard</option>
+              </select>
+              <motion.button
+                onClick={handleCreateSoloGame}
+                className="w-64 py-4 bg-gradient-to-r from-green-600 to-green-800 text-white rounded-lg shadow-lg hover:shadow-xl"
+                variants={buttonVariants}
+                whileHover="hover"
+                whileTap="tap"
+              >
+                Start Solo Game
+              </motion.button>
+            </motion.div>
+            <motion.button
+              onClick={() => setShowInviteInput(!showInviteInput)}
+              className="w-64 py-4 bg-gradient-to-r from-indigo-600 to-indigo-800 text-white rounded-lg shadow-lg hover:shadow-xl"
+              variants={buttonVariants}
+              whileHover="hover"
+              whileTap="tap"
+            >
+              {showInviteInput ? "Hide Invite" : "Join by Code"}
+            </motion.button>
+          </motion.div>
 
-                {/* Queue Information */}
-                {inQueue && (
-                    <div className="mt-8 text-center bg-gray-800 p-6 rounded-lg shadow-md relative">
-                        <h2 className="text-2xl mb-4">Queue Information</h2>
-                        <p className="text-lg">People in queue: {queueCount}</p>
-                        {/* Кнопка "Leave Quick Match" расположена внизу рядом с очередью */}
-                        <button
-                            onClick={handleLeaveQueue}
-                            className="px-8 py-4 bg-red-500 hover:bg-red-600 text-white rounded-lg shadow-lg transform transition-transform hover:scale-110 focus:outline-none focus:ring-4 focus:ring-red-500 absolute bottom-4 left-4"
-                        >
-                            Leave Quick Match
-                        </button>
-                    </div>
-                )}
-            </div>
-        </AuthenticatedLayout>
-    );
+          {/* Invite Code Input */}
+          {showInviteInput && (
+            <motion.div 
+              className="mt-6 text-center"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+            >
+              <motion.h2 className="text-2xl mb-4 text-purple-300" variants={itemVariants}>
+                Enter Invite Code
+              </motion.h2>
+              <input
+                type="text"
+                value={inviteCode}
+                onChange={(e) => setInviteCode(e.target.value)}
+                placeholder="Enter invite code"
+                className="w-64 px-4 py-3 rounded-lg bg-gray-800 text-white border border-gray-600 focus:ring-2 focus:ring-purple-500 mb-4"
+              />
+              <motion.button
+                onClick={handleJoinByInviteCode}
+                className="w-64 py-4 bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-lg shadow-lg hover:shadow-xl"
+                variants={buttonVariants}
+                whileHover="hover"
+                whileTap="tap"
+              >
+                Join Lobby
+              </motion.button>
+            </motion.div>
+          )}
+
+          {/* Queue Info */}
+          {inQueue && (
+            <motion.div 
+              className="mt-8 bg-gray-800/90 p-6 rounded-lg shadow-lg border border-gray-700/50 relative"
+              variants={itemVariants}
+            >
+              <motion.h2 className="text-2xl mb-4 text-blue-300" variants={itemVariants}>
+                Queue Information
+              </motion.h2>
+              <p className="text-lg text-gray-300">Players in queue: {queueCount}</p>
+              {queueTime && <p className="text-lg text-gray-300">Time: {queueTime}s</p>}
+              <motion.button
+                onClick={handleLeaveQueue}
+                className="mt-4 w-full py-4 bg-gradient-to-r from-red-600 to-red-800 text-white rounded-lg shadow-lg hover:shadow-xl"
+                variants={buttonVariants}
+                whileHover="hover"
+                whileTap="tap"
+              >
+                Leave Quick Match
+              </motion.button>
+            </motion.div>
+          )}
+        </motion.div>
+      </motion.div>
+    </AuthenticatedLayout>
+  );
 };
 
 export default Dashboard;

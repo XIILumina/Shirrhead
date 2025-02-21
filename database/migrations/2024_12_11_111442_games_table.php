@@ -13,7 +13,7 @@ return new class extends Migration
             $table->string('name');
             $table->string('status')->default('pending');
             $table->unsignedBigInteger('current_turn')->nullable();
-            $table->json('cards')->nullable();
+            $table->timestamp('start_time')->nullable();
             $table->string('invite_code')->unique();
             $table->timestamps();
         });

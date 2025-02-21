@@ -3,180 +3,144 @@
 namespace App\Http\Controllers;
 
 use App\Models\Game;
-use Illuminate\Support\Facades\Log;
 use App\Models\Player;
+use App\Models\Card;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use App\Events\CardPlayed;
 
 class PlayerController extends Controller
 {
-    // Play a card
     public function playCard(Request $request, $gameId)
 {
     $user = Auth::user();
     $player = Player::where('user_id', $user->id)->where('game_id', $gameId)->first();
+    $game = Game::findOrFail($gameId);
 
-    if (!$player) {
-        return response()->json(['message' => 'You are not part of this game'], 403);
+    // Check if it’s the player's turn using player.id instead of user.id
+    if (!$player || $game->current_turn != $player->id) {
+        return response()->json(['message' => 'Not your turn or not in game'], 403);
     }
 
-    $card = $request->input('card'); // Ensure this is an array
-    $hand = json_decode($player->hand, true);
-    $game = Game::find($gameId);
+    $cardId = $request->input('card_id');
+    $card = Card::find($cardId);
 
-    // Debugging
-    Log::info("Card being played:", $card);
-    Log::info("Player's hand:", $hand);
-
-    // Validate card format
-    if (!isset($card['value']) || !isset($card['suit'])) {
-        return response()->json(['message' => 'Invalid card format'], 400);
+    if (!$card || $card->player_id != $player->id || $card->location != 'hand') {
+        return response()->json(['message' => 'Invalid card'], 400);
     }
 
-    if (!$game || $game->status !== 'ongoing') {
-        return response()->json(['message' => 'Game is not in progress'], 400);
-    }
-
-    $gameCards = json_decode($game->cards, true);
-    $pile = $gameCards['pile'] ?? [];
-
-    // Validate the played card
-    if (!in_array($card, $hand)) {
-        return response()->json(['message' => 'You cannot play a card you do not have'], 400);
-    }
-
-    // Check if card is valid compared to the pile top
-    $topCard = end($pile); // Get the top card
+    $topCard = Card::where('game_id', $gameId)->where('location', 'pile')->orderBy('position', 'desc')->first();
     if ($topCard && !$this->isValidPlay($card, $topCard)) {
         return response()->json(['message' => 'Invalid card play'], 400);
     }
 
-    // Remove played card from hand
-    $index = array_search($card, $hand);
-    unset($hand[$index]);
-    $hand = array_values($hand); // Reindex the array
+    // Move card to pile
+    $pileCount = Card::where('game_id', $gameId)->where('location', 'pile')->count();
+    $card->update([
+        'player_id' => null,
+        'location' => 'pile',
+        'position' => $pileCount,
+    ]);
 
-    // Update the pile
-    $pile[] = $card;
-
-    // Special rule: Handle special cards like 2 and 10
-    if ($card['value'] === '10') {
-        $pile = []; // Burn the pile
-    } elseif ($card['value'] === '2') {
-        // Reset allows any card next
+    // Handle special cards
+    if ($card->value === '10') {
+        Card::where('game_id', $gameId)->where('location', 'pile')->delete(); // Burn pile
     }
 
-    // Update game state
-    $gameCards['pile'] = $pile;
-    $gameCards['deck'] = $gameCards['deck'] ?? [];
-    $game->cards = json_encode($gameCards);
-
-    // Draw cards to maintain 3 cards in hand
-    while (count($hand) < 3 && !empty($gameCards['deck'])) {
-        $hand[] = array_shift($gameCards['deck']);
+    // Draw card if hand < 3
+    $handCount = Card::where('player_id', $player->id)->where('location', 'hand')->count();
+    if ($handCount < 3) {
+        $deckCard = Card::where('game_id', $gameId)->where('location', 'deck')->orderBy('position')->first();
+        if ($deckCard) {
+            $deckCard->update([
+                'player_id' => $player->id,
+                'location' => 'hand',
+                'position' => $handCount,
+            ]);
+        }
     }
 
-    // Save changes
-    $player->hand = json_encode($hand);
-    $game->cards = json_encode($gameCards);
-    $player->save();
+    // Switch turn
+    $nextPlayer = Player::where('game_id', $gameId)->where('position', '>', $player->position)->orderBy('position')->first()
+        ?? Player::where('game_id', $gameId)->orderBy('position')->first();
+    $game->current_turn = $nextPlayer->id; // Use player.id consistently
     $game->save();
 
-    // Check for win condition
-    if (count($hand) === 0) {
-        $game->status = 'completed';
-        $game->winner = $user->id;
-        $game->save();
-        return response()->json(['message' => 'You won the game!'], 200);
-    }
+    broadcast(new CardPlayed($gameId, $card->toArray()))->toOthers();
 
-    return response()->json(['message' => 'Card played successfully', 'hand' => $player->hand]);
+    return response()->json(['message' => 'Card played', 'pile' => Card::where('game_id', $gameId)->where('location', 'pile')->get()]);
+}
+private function isValidPlay($card, $topCard)
+{
+    // Special cards like '2' are always valid
+    if ($card['value'] === '2') return true;
+
+    // '10' burns the pile, always valid
+    if ($card['value'] === '10') return true;
+
+    // Normal card check: must be >= top card
+    $values = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+    $cardIndex = array_search($card['value'], $values);
+    $topCardIndex = array_search($topCard['value'], $values);
+
+    return $cardIndex >= $topCardIndex;
 }
 
 
-
-    // Helper to validate card play
-    private function isValidPlay($card, $topCard)
-    {
-        // Special cards like '2' are always valid
-        if ($card['value'] === '2') return true;
-
-        // '10' burns the pile, always valid
-        if ($card['value'] === '10') return true;
-
-        // Normal card check: must be >= top card
-        $values = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
-        $cardIndex = array_search($card['value'], $values);
-        $topCardIndex = array_search($topCard['value'], $values);
-
-        return $cardIndex >= $topCardIndex;
-    }
-
-    // Pick up the pile
     public function pickUpCards($gameId)
     {
         $user = Auth::user();
         $player = Player::where('user_id', $user->id)->where('game_id', $gameId)->first();
+        $game = Game::findOrFail($gameId);
 
-        if (!$player) {
-            return response()->json(['message' => 'You are not part of this game'], 403);
+        if ($game->current_turn != $user->id) {
+            return response()->json(['message' => 'Not your turn'], 403);
         }
 
-        $game = Game::find($gameId);
-        $gameCards = json_decode($game->cards, true);
-        $pile = $gameCards['pile'] ?? [];
-
-        if (empty($pile)) {
-            return response()->json(['message' => 'No cards in the pile to pick up'], 400);
+        $pile = Card::where('game_id', $gameId)->where('location', 'pile')->get();
+        if ($pile->isEmpty()) {
+            return response()->json(['message' => 'Pile is empty'], 400);
         }
 
-        // Add pile to player's hand
-        $hand = json_decode($player->hand, true);
-        $hand = array_merge($hand, $pile);
+        $handCount = Card::where('player_id', $player->id)->where('location', 'hand')->count();
+        foreach ($pile as $index => $card) {
+            $card->update([
+                'player_id' => $player->id,
+                'location' => 'hand',
+                'position' => $handCount + $index,
+            ]);
+        }
 
-        // Clear the pile
-        $gameCards['pile'] = [];
-        $game->cards = json_encode($gameCards);
-
-        // Save updates
-        $player->hand = json_encode($hand);
-        $player->save();
+        $nextPlayer = Player::where('game_id', $gameId)->where('position', '>', $player->position)->orderBy('position')->first()
+            ?? Player::where('game_id', $gameId)->orderBy('position')->first();
+        $game->current_turn = $nextPlayer->user_id ?? $nextPlayer->id;
         $game->save();
 
-        return response()->json(['message' => 'Picked up all cards from the pile', 'hand' => $player->hand]);
+        return response()->json(['message' => 'Pile picked up']);
     }
 
-    // Draw a card
     public function drawCard($gameId)
     {
         $user = Auth::user();
         $player = Player::where('user_id', $user->id)->where('game_id', $gameId)->first();
+        $game = Game::findOrFail($gameId);
 
-        if (!$player) {
-            return response()->json(['message' => 'You are not part of this game'], 403);
+        if ($game->current_turn != $user->id) {
+            return response()->json(['message' => 'Not your turn'], 403);
         }
 
-        $game = Game::find($gameId);
-        $gameCards = json_decode($game->cards, true);
-        $deck = $gameCards['deck'] ?? [];
-
-        if (empty($deck)) {
-            return response()->json(['message' => 'No cards left in the deck'], 400);
+        $deckCard = Card::where('game_id', $gameId)->where('location', 'deck')->orderBy('position')->first();
+        if (!$deckCard) {
+            return response()->json(['message' => 'Deck is empty'], 400);
         }
 
-        // Draw the top card
-        $drawnCard = array_shift($deck);
-        $hand = json_decode($player->hand, true);
-        $hand[] = $drawnCard;
+        $handCount = Card::where('player_id', $player->id)->where('location', 'hand')->count();
+        $deckCard->update([
+            'player_id' => $player->id,
+            'location' => 'hand',
+            'position' => $handCount,
+        ]);
 
-        // Save updates
-        $gameCards['deck'] = $deck;
-        $game->cards = json_encode($gameCards);
-        $player->hand = json_encode($hand);
-
-        $game->save();
-        $player->save();
-
-        return response()->json(['message' => 'Card drawn successfully', 'card' => $drawnCard, 'hand' => $player->hand]);
+        return response()->json(['message' => 'Card drawn']);
     }
 }

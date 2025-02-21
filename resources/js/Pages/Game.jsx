@@ -1,223 +1,249 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
-import Pusher from "pusher-js"; // Import Pusher
-import Echo from "laravel-echo"; // Import Laravel Echo
+import Echo from "laravel-echo";
+import Pusher from "pusher-js";
+import { motion, AnimatePresence } from "framer-motion";
 
-const Game = ({ game, players }) => {
+const Game = ({ game }) => {
   const [hand, setHand] = useState([]);
   const [visibleCards, setVisibleCards] = useState([]);
   const [hiddenCards, setHiddenCards] = useState([]);
   const [pile, setPile] = useState([]);
-  const [deckCount, setDeckCount] = useState(0);
+  const [deck, setDeck] = useState([]);
   const [playerTurn, setPlayerTurn] = useState(false);
-  const [gameStatus, setGameStatus] = useState(game.status);
-  const [timeElapsed, setTimeElapsed] = useState(0);
-  const [animatedCard, setAnimatedCard] = useState(null);
-  const [enemyVisibleCards, setEnemyVisibleCards] = useState([]);
+  const [enemies, setEnemies] = useState([]);
+  const [error, setError] = useState(null);
 
-  // Initialize Pusher and Laravel Echo
+  const cardVariants = {
+    initial: { y: 50, opacity: 0, rotate: -5 },
+    animate: { y: 0, opacity: 1, rotate: 0, transition: { type: "spring", stiffness: 300, damping: 20 } },
+    exit: { y: -50, opacity: 0, rotate: 5, transition: { duration: 0.3 } },
+    play: { x: 0, y: -150, scale: 1.1, rotate: 10, transition: { duration: 0.5 } },
+    pile: { x: 0, y: 0, rotate: 3, transition: { duration: 0.5 } }
+  };
+
   useEffect(() => {
     const echo = new Echo({
-        broadcaster: "pusher",
-        key: import.meta.env.VITE_PUSHER_APP_KEY, // Use Vite environment variables
-        cluster: import.meta.env.VITE_PUSHER_APP_CLUSTER,
-        encrypted: true,
+      broadcaster: "pusher",
+      key: import.meta.env.VITE_PUSHER_APP_KEY,
+      cluster: import.meta.env.VITE_PUSHER_APP_CLUSTER,
+      encrypted: true,
     });
 
-    // Listen for the CardPlayed event
-    echo.channel(`game.${game.id}`).listen('.card.played', (data) => {
-        setEnemyVisibleCards((prev) => [...prev, data.card]);
+    echo.channel(`game.${game.id}`).listen(".card.played", () => {
+      fetchGameState();
     });
 
-    // Cleanup on component unmount
-    return () => {
-        echo.leave(`game.${game.id}`);
-    };
-}, [game.id]);
-
-  // Fetch the player's current state
-  const fetchPlayerState = async () => {
-    try {
-      const response = await axios.get(`/game/${game.id}/state`);
-      const {
-        hand,
-        pile,
-        deck,
-        turn,
-        visible_cards,
-        hidden_cards,
-        enemy_visible_cards,
-      } = response.data;
-
-      setHand(Array.isArray(hand) ? hand : []);
-      setVisibleCards(Array.isArray(visible_cards) ? visible_cards : []);
-      setHiddenCards(Array.isArray(hidden_cards) ? hidden_cards : []);
-      setPile(Array.isArray(pile) ? pile : []);
-      setDeckCount(Array.isArray(deck) ? deck.length : 0);
-      setPlayerTurn(turn);
-      setEnemyVisibleCards(Array.isArray(enemy_visible_cards) ? enemy_visible_cards : []);
-    } catch (err) {
-      console.error("Error fetching game state:", err);
-    }
-  };
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setTimeElapsed((prevTime) => prevTime + 1);
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    fetchPlayerState();
+    fetchGameState();
+    return () => echo.leave(`game.${game.id}`);
   }, [game.id]);
 
-
-  const playCard = async (card) => {
-    console.log("Card being played:", card); // Debugging
-    setAnimatedCard(card);
-    setTimeout(async () => {
-      try {
-        const response = await axios.post(`/game/${game.id}/play-card`, { card });
-        setHand(response.data.hand);
-        setPile(response.data.pile);
-        setAnimatedCard(null);
-      } catch (err) {
-        alert(err.response.data.message);
-      }
-    }, 500);
+  const fetchGameState = async () => {
+    try {
+      const response = await axios.get(`/game/${game.id}/state`);
+      setHand(response.data.hand || []);
+      setVisibleCards(response.data.visible_cards || []);
+      setHiddenCards(response.data.hidden_cards || []);
+      setPile(response.data.pile || []);
+      setDeck(response.data.deck || []);
+      setPlayerTurn(response.data.turn);
+      setEnemies(response.data.enemies || []);
+      setError(null);
+    } catch (err) {
+      console.error("Error fetching game state:", err);
+      setError(err.response?.data?.message || "Failed to load game state");
+    }
   };
 
+  const playCard = async (card) => {
+    if (!playerTurn) return;
+    try {
+      await axios.post(`/game/${game.id}/play-card`, { card_id: card.id });
+      fetchGameState();
+    } catch (err) {
+      console.error("Error playing card:", err);
+      setError(err.response?.data?.message || "Failed to play card");
+    }
+  };
 
   const pickUpPile = async () => {
+    if (!playerTurn) return;
     try {
-      const response = await axios.post(`/game/${game.id}/pick-up`);
-      setHand(response.data.hand);
-      setPile([]);
+      await axios.post(`/game/${game.id}/pick-up`);
+      fetchGameState();
     } catch (err) {
       console.error("Error picking up pile:", err);
+      setError(err.response?.data?.message || "Failed to pick up pile");
     }
   };
 
   const drawCard = async () => {
+    if (!playerTurn) return;
     try {
-        const response = await axios.post(`/game/${game.id}/draw-card`);
-        setHand(response.data.hand);
-        setDeckCount((prev) => prev - 1);
-
-        // Trigger animation
-        setAnimatedCard(response.data.card);
-        setTimeout(() => {
-            setAnimatedCard(null);
-        }, 500); // Match the animation duration
+      await axios.post(`/game/${game.id}/draw`);
+      fetchGameState();
     } catch (err) {
-        console.error("Error drawing card:", err);
+      console.error("Error drawing card:", err);
+      setError(err.response?.data?.message || "Failed to draw card");
     }
-};
+  };
+
+  if (error) return <div className="text-red-500 text-center p-4">{error}</div>;
 
   return (
-    <div className="min-h-screen bg-green-900 text-white flex flex-col justify-between p-4">
-  {/* Enemy Section */}
-<div className="flex flex-col items-center">
-  <h2 className="text-xl mb-4">Enemy's Cards</h2>
-  {players
-    .filter((player) => player.is_bot)
-    .map((bot, index) => (
-      <div key={index} className="mb-4">
-        <h3 className="text-lg mb-2">Bot {index + 1}</h3>
-        <div className="flex space-x-2">
-          {bot.visible_cards.map((card, cardIndex) => (
-            <img
-              key={cardIndex}
+    <div className="min-h-screen bg-gradient-to-br from-green-900 to-green-700 text-white flex flex-col justify-between p-4">
+      <div className="relative flex-1 flex items-center justify-center">
+        {enemies.length > 0 && (
+          <motion.div className="absolute top-0 left-1/2 transform -translate-x-1/2" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <h3 className="text-lg mb-2 text-center">{enemies[0].name}</h3>
+            <div className="flex space-x-2 justify-center">
+              {enemies[0].visible_cards.map((card) => (
+                <motion.img
+                  key={card.id}
+                  src={`/images/cards/${card.value}_of_${card.suit}.png`}
+                  alt={`${card.value} of ${card.suit}`}
+                  className="w-16 h-24"
+                  variants={cardVariants}
+                  initial="initial"
+                  animate="animate"
+                />
+              ))}
+            </div>
+          </motion.div>
+        )}
+
+        {enemies.length > 1 && (
+          <motion.div className="absolute left-0 top-1/2 transform -translate-y-1/2 rotate-90" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <h3 className="text-lg mb-2 text-center">{enemies[1].name}</h3>
+            <div className="flex space-x-2 justify-center">
+              {enemies[1].visible_cards.map((card) => (
+                <motion.img
+                  key={card.id}
+                  src={`/images/cards/${card.value}_of_${card.suit}.png`}
+                  alt={`${card.value} of ${card.suit}`}
+                  className="w-16 h-24"
+                  variants={cardVariants}
+                  initial="initial"
+                  animate="animate"
+                />
+              ))}
+            </div>
+          </motion.div>
+        )}
+
+        {enemies.length > 2 && (
+          <motion.div className="absolute right-0 top-1/2 transform -translate-y-1/2 -rotate-90" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <h3 className="text-lg mb-2 text-center">{enemies[2].name}</h3>
+            <div className="flex space-x-2 justify-center">
+              {enemies[2].visible_cards.map((card) => (
+                <motion.img
+                  key={card.id}
+                  src={`/images/cards/${card.value}_of_${card.suit}.png`}
+                  alt={`${card.value} of ${card.suit}`}
+                  className="w-16 h-24"
+                  variants={cardVariants}
+                  initial="initial"
+                  animate="animate"
+                />
+              ))}
+            </div>
+          </motion.div>
+        )}
+
+        <div className="flex space-x-8">
+          <motion.div className="relative" onClick={drawCard} whileHover={{ scale: 1.05 }}>
+            {deck.length > 0 && (
+              <motion.img
+                src="/images/cards/back.png"
+                alt="Deck"
+                className="w-24 h-36"
+                initial={{ y: 0 }}
+                animate={{ y: [0, -5, 0] }}
+                transition={{ repeat: Infinity, duration: 2 }}
+              />
+            )}
+            <span className="absolute top-0 left-0 bg-black bg-opacity-50 px-2 py-1 rounded">{deck.length}</span>
+          </motion.div>
+
+          <div className="relative w-24 h-36">
+            <AnimatePresence>
+              {pile.map((card, index) => (
+                <motion.img
+                  key={card.id}
+                  src={`/images/cards/${card.value}_of_${card.suit}.png`}
+                  alt={`${card.value} of ${card.suit}`}
+                  className="w-24 h-36 absolute"
+                  variants={cardVariants}
+                  initial="play"
+                  animate="pile"
+                  style={{ zIndex: index }}
+                />
+              ))}
+            </AnimatePresence>
+            {pile.length > 0 && (
+              <button
+                onClick={pickUpPile}
+                className="absolute bottom-0 left-0 bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded"
+              >
+                Pick Up
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col items-center pb-4">
+        <h2 className="text-xl mb-4">Your Cards {playerTurn ? "(Your Turn)" : ""}</h2>
+        <div className="flex space-x-3">
+          <AnimatePresence>
+            {hand.map((card) => (
+              <motion.button
+                key={card.id}
+                onClick={() => playCard(card)}
+                variants={cardVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                whileHover={{ scale: 1.1, zIndex: 10 }}
+                disabled={!playerTurn}
+              >
+                <img
+                  src={`/images/cards/${card.value}_of_${card.suit}.png`}
+                  alt={`${card.value} of ${card.suit}`}
+                  className="w-24 h-36"
+                />
+              </motion.button>
+            ))}
+          </AnimatePresence>
+        </div>
+        <div className="mt-4 flex space-x-2">
+          {visibleCards.map((card) => (
+            <motion.img
+              key={card.id}
               src={`/images/cards/${card.value}_of_${card.suit}.png`}
               alt={`${card.value} of ${card.suit}`}
-              className="w-24 h-36 transform hover:scale-110 transition-transform"
+              className="w-24 h-36"
+              variants={cardVariants}
+              initial="initial"
+              animate="animate"
+            />
+          ))}
+        </div>
+        <div className="flex -space-x-12 mt-4">
+          {hiddenCards.map((card) => (
+            <motion.img
+              key={card.id}
+              src="/images/cards/back.png"
+              alt="Hidden Card"
+              className="w-36 h-48"
+              variants={cardVariants}
+              initial="initial"
+              animate="animate"
             />
           ))}
         </div>
       </div>
-    ))}
-</div>
-
-  {/* Pile Section */}
-  <div className="flex justify-center">
-    <div className="relative">
-      {pile.map((card, index) => (
-        <img
-          key={index}
-          src={`/images/cards/${card.value}_of_${card.suit}.png`}
-          alt={`${card.value} of ${card.suit}`}
-          className="w-24 h-36 absolute"
-          style={{
-            transform: `rotate(${index * 10 - (pile.length * 5)}deg) translateY(${index * 5}px)`,
-          }}
-        />
-      ))}
     </div>
-  </div>
-
-  <div className="flex justify-center">
-  <button
-    onClick={drawCard}
-    className="px-8 py-4 bg-gray-500/75 hover:bg-gray-600 text-white rounded-lg shadow-lg transform transition-transform hover:scale-110 focus:outline-none focus:ring-4 focus:ring-gray-500"
-  >
-    Draw Card
-  </button>
-</div>
-
-
-  {/* Player Section */}
-  <div className="flex flex-col items-center">
-  <h2 className="text-xl mb-4">Your Cards</h2>
-  <div className="flex space-x-2">
-    {hand.map((card, index) => (
-      <button
-        key={index}
-        onClick={() => playCard(card)}
-        className={`transform hover:scale-110 transition-transform ${
-          animatedCard === card ? "card-animation" : ""
-        }`}
-      >
-        <img
-          src={`/images/cards/${card.value}_of_${card.suit}.png`}
-          alt={`${card.value} of ${card.suit}`}
-          className="w-24 h-36"
-        />
-      </button>
-    ))}
-  </div>
-  <div className="mt-4">
-    <h3>Visible Cards</h3>
-    <div className="flex space-x-2 relative">
-      {visibleCards.map((card, index) => (
-        <img
-          key={index}
-          src={`/images/cards/${card.value}_of_${card.suit}.png`}
-          alt={`${card.value} of ${card.suit}`}
-          className="w-24 h-36 absolute"
-          style={{
-            transform: `translateX(${index * 20}px)`,
-            zIndex: index + 1,
-          }}
-        />
-      ))}
-    </div>
-  </div>
-  <div className="mt-4">
-    <h3>Hidden Cards</h3>
-    <div className="flex space-x-2">
-      {hiddenCards.map((_, index) => (
-        <img
-          key={index}
-          src="/images/cards/back.png"
-          alt="Hidden Card"
-          className="w-36 h-48" // Larger size for hidden cards
-        />
-      ))}
-    </div>
-  </div>
-</div>
-</div>
   );
 };
 

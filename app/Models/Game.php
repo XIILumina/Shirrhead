@@ -1,4 +1,4 @@
-<?php 
+<?php
 
 namespace App\Models;
 
@@ -13,16 +13,17 @@ class Game extends Model
         'name',
         'status',
         'current_turn',
-        'cards',
         'invite_code',
-    ];
-
-    protected $casts = [
-        'cards' => 'array', // Automatically decode/encode JSON
+        'start_time', // Added since it's used in createSoloGame
     ];
 
     public function players()
     {
         return $this->hasMany(Player::class);
+    }
+
+    public function cards()
+    {
+        return $this->hasMany(Card::class);
     }
 }

@@ -2,31 +2,43 @@
 @tailwind components;
 @tailwind utilities;
 
+.table-layout {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  height: 60vh;
+  perspective: 1000px; /* Adds 3D effect */
+}
 
-@keyframes slideToPile {
-    0% {
-      transform: translateY(0) rotate(0deg);
-    }
-    100% {
-      transform: translateY(-100px) rotate(10deg);
-    }
-  }
-  
-  .card-animation {
-    animation: slideToPile 0.5s ease-in-out forwards;
-  }
-  @keyframes drawCard {
-    0% {
-      transform: translateY(0);
-      opacity: 1;
-    }
-    100% {
-      transform: translateY(100px);
-      opacity: 0;
-    }
-  }
-  
-  .card-draw-animation {
-    animation: drawCard 0.5s ease-in-out forwards;
-  }
-  
+.player-position {
+  position: absolute;
+  transform-style: preserve-3d;
+}
+
+.player-position.bottom {
+  bottom: 0;
+}
+
+.player-position.top {
+  top: 0;
+}
+
+.player-position.left {
+  left: 0;
+  transform: rotate(-90deg);
+}
+
+.player-position.right {
+  right: 0;
+  transform: rotate(90deg);
+}
+
+/* Custom card styles */
+.card {
+  @apply rounded-lg shadow-lg transition-all duration-200;
+}
+
+.card:hover {
+  @apply shadow-xl;
+}
