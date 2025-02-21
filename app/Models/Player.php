@@ -11,10 +11,8 @@ class Player extends Model
     protected $fillable = [
         'user_id',
         'game_id',
-        'hand',
-        'visible_cards',
-        'hidden_cards',
         'position',
+        'is_bot',
     ];
 
     protected $casts = [

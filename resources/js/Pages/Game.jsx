@@ -13,16 +13,25 @@ const Game = ({ game }) => {
   const [playerTurn, setPlayerTurn] = useState(false);
   const [enemies, setEnemies] = useState([]);
   const [error, setError] = useState(null);
+  const [pickedUpCard, setPickedUpCard] = useState(null);
 
   const cardVariants = {
     initial: { y: 50, opacity: 0, rotate: -5 },
     animate: { y: 0, opacity: 1, rotate: 0, transition: { type: "spring", stiffness: 300, damping: 20 } },
     exit: { y: -50, opacity: 0, rotate: 5, transition: { duration: 0.3 } },
-    play: { x: 0, y: -150, scale: 1.1, rotate: 10, transition: { duration: 0.5 } },
-    pile: { x: 0, y: 0, rotate: 3, transition: { duration: 0.5 } }
+    play: { x: 0, y: -150, scale: 1.1, rotate: 10, transition: { duration: 1 } },
+    pile: { x: 0, y: 0, rotate: 3, transition: { duration: 1 } },
+    pickup: { x: 0, y: 200, scale: 1, rotate: 0, transition: { duration: 1, ease: "easeInOut" } },
   };
 
   useEffect(() => {
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+    if (csrfToken) {
+      axios.defaults.headers.common['X-CSRF-TOKEN'] = csrfToken;
+    } else {
+      console.warn("CSRF token not found in meta tag");
+    }
+
     const echo = new Echo({
       broadcaster: "pusher",
       key: import.meta.env.VITE_PUSHER_APP_KEY,
@@ -30,7 +39,8 @@ const Game = ({ game }) => {
       encrypted: true,
     });
 
-    echo.channel(`game.${game.id}`).listen(".card.played", () => {
+    echo.channel(`game.${game.id}`).listen(".card.played", (e) => {
+      console.log("Pusher event received:", e); // Debug Pusher data
       fetchGameState();
     });
 
@@ -50,7 +60,7 @@ const Game = ({ game }) => {
       setEnemies(response.data.enemies || []);
       setError(null);
     } catch (err) {
-      console.error("Error fetching game state:", err);
+      console.error("Error fetching game state:", err.response?.data || err);
       setError(err.response?.data?.message || "Failed to load game state");
     }
   };
@@ -58,10 +68,12 @@ const Game = ({ game }) => {
   const playCard = async (card) => {
     if (!playerTurn) return;
     try {
-      await axios.post(`/game/${game.id}/play-card`, { card_id: card.id });
+      const response = await axios.post(`/game/${game.id}/play-card`, { card_id: card.id });
+      console.log("Play card response:", response.data);
       fetchGameState();
+      setError(null);
     } catch (err) {
-      console.error("Error playing card:", err);
+      console.error("Error playing card:", err.response?.data || err);
       setError(err.response?.data?.message || "Failed to play card");
     }
   };
@@ -69,10 +81,17 @@ const Game = ({ game }) => {
   const pickUpPile = async () => {
     if (!playerTurn) return;
     try {
-      await axios.post(`/game/${game.id}/pick-up`);
-      fetchGameState();
+      const topCard = pile[pile.length - 1];
+      setPickedUpCard(topCard);
+      setTimeout(async () => {
+        setPickedUpCard(null);
+        const response = await axios.post(`/game/${game.id}/pick-up-cards`);
+        console.log("Pick up pile response:", response.data);
+        fetchGameState();
+        setError(null);
+      }, 1000);
     } catch (err) {
-      console.error("Error picking up pile:", err);
+      console.error("Error picking up pile:", err.response?.data || err);
       setError(err.response?.data?.message || "Failed to pick up pile");
     }
   };
@@ -80,19 +99,39 @@ const Game = ({ game }) => {
   const drawCard = async () => {
     if (!playerTurn) return;
     try {
-      await axios.post(`/game/${game.id}/draw`);
+      const response = await axios.post(`/game/${game.id}/draw-card`);
+      console.log("Draw card response:", response.data);
       fetchGameState();
+      setError(null);
     } catch (err) {
-      console.error("Error drawing card:", err);
+      console.error("Error drawing card:", err.response?.data || err);
       setError(err.response?.data?.message || "Failed to draw card");
     }
   };
 
-  if (error) return <div className="text-red-500 text-center p-4">{error}</div>;
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-900 to-green-700 text-white flex flex-col justify-between p-4">
+      <AnimatePresence>
+        {error && (
+          <motion.div
+            className="fixed top-4 left-1/2 transform -translate-x-1/2 bg-red-600 text-white p-4 rounded shadow-lg z-50"
+            initial={{ opacity: 0, y: -50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -50 }}
+          >
+            {error}
+            <button
+              onClick={() => setError(null)}
+              className="ml-4 bg-white text-red-600 px-2 py-1 rounded"
+            >
+              Close
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="relative flex-1 flex items-center justify-center">
+        {/* Enemies */}
         {enemies.length > 0 && (
           <motion.div className="absolute top-0 left-1/2 transform -translate-x-1/2" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
             <h3 className="text-lg mb-2 text-center">{enemies[0].name}</h3>
@@ -111,7 +150,6 @@ const Game = ({ game }) => {
             </div>
           </motion.div>
         )}
-
         {enemies.length > 1 && (
           <motion.div className="absolute left-0 top-1/2 transform -translate-y-1/2 rotate-90" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
             <h3 className="text-lg mb-2 text-center">{enemies[1].name}</h3>
@@ -130,7 +168,6 @@ const Game = ({ game }) => {
             </div>
           </motion.div>
         )}
-
         {enemies.length > 2 && (
           <motion.div className="absolute right-0 top-1/2 transform -translate-y-1/2 -rotate-90" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
             <h3 className="text-lg mb-2 text-center">{enemies[2].name}</h3>
@@ -150,6 +187,7 @@ const Game = ({ game }) => {
           </motion.div>
         )}
 
+        {/* Table */}
         <div className="flex space-x-8">
           <motion.div className="relative" onClick={drawCard} whileHover={{ scale: 1.05 }}>
             {deck.length > 0 && (
@@ -175,7 +213,7 @@ const Game = ({ game }) => {
                   className="w-24 h-36 absolute"
                   variants={cardVariants}
                   initial="play"
-                  animate="pile"
+                  animate={pickedUpCard && pickedUpCard.id === card.id ? "pickup" : "pile"}
                   style={{ zIndex: index }}
                 />
               ))}
@@ -183,7 +221,7 @@ const Game = ({ game }) => {
             {pile.length > 0 && (
               <button
                 onClick={pickUpPile}
-                className="absolute bottom-0 left-0 bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded"
+                className="absolute bottom-0 left-0 bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded z-10"
               >
                 Pick Up
               </button>
@@ -216,31 +254,35 @@ const Game = ({ game }) => {
             ))}
           </AnimatePresence>
         </div>
-        <div className="mt-4 flex space-x-2">
-          {visibleCards.map((card) => (
-            <motion.img
-              key={card.id}
-              src={`/images/cards/${card.value}_of_${card.suit}.png`}
-              alt={`${card.value} of ${card.suit}`}
-              className="w-24 h-36"
-              variants={cardVariants}
-              initial="initial"
-              animate="animate"
-            />
-          ))}
-        </div>
-        <div className="flex -space-x-12 mt-4">
-          {hiddenCards.map((card) => (
-            <motion.img
-              key={card.id}
-              src="/images/cards/back.png"
-              alt="Hidden Card"
-              className="w-36 h-48"
-              variants={cardVariants}
-              initial="initial"
-              animate="animate"
-            />
-          ))}
+
+        {/* Hidden and Visible Cards Below Hand */}
+        <div className="mt-8 relative flex justify-center items-center">
+          <div className="relative flex space-x-2">
+            {hiddenCards.map((card, index) => (
+              <motion.img
+                key={card.id}
+                src={`/images/cards/${card.value}_of_${card.suit}.png`}
+                alt={`${card.value} of ${card.suit}`}
+                className="w-24 h-36 absolute"
+                variants={cardVariants}
+                initial="initial"
+                animate="animate"
+                style={{ left: index * 36, zIndex: index }}
+              />
+            ))}
+            {visibleCards.map((card, index) => (
+              <motion.img
+                key={card.id}
+                src={`/images/cards/${card.value}_of_${card.suit}.png`}
+                alt={`${card.value} of ${card.suit}`}
+                className="w-24 h-36 absolute"
+                variants={cardVariants}
+                initial="initial"
+                animate="animate"
+                style={{ left: (hiddenCards.length + index) * 36, zIndex: hiddenCards.length + index }}
+              />
+            ))}
+          </div>
         </div>
       </div>
     </div>

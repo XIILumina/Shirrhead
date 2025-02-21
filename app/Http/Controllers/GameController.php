@@ -47,9 +47,10 @@ class GameController extends Controller
             $game = Game::create([
                 'name' => 'Game from Lobby',
                 'status' => 'ongoing',
-                'cards' => json_encode($this->generateDeck()),
                 'invite_code' => $lobby->invite_code,
             ]);
+            $game->cards = json_encode($this->generateDeck($game->id));
+            $game->save();
 
             // Add all lobby players to the game
             $lobbyPlayers = LobbyPlayer::where('lobby_id', $lobby->id)->get();

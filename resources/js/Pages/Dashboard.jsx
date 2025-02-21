@@ -11,19 +11,13 @@ const Dashboard = () => {
   const [queueTime, setQueueTime] = useState(null);
   const [queueCount, setQueueCount] = useState(0);
   const [difficulty, setDifficulty] = useState("easy");
-  const [isJoined, setIsJoined] = useState(false);
 
-  // Animation variants
   const containerVariants = {
     hidden: { opacity: 0, y: 50 },
     visible: { 
       opacity: 1, 
       y: 0, 
-      transition: { 
-        duration: 0.8, 
-        ease: "easeOut", 
-        staggerChildren: 0.2 
-      }
+      transition: { duration: 0.8, ease: "easeOut", staggerChildren: 0.2 }
     }
   };
 
@@ -42,24 +36,14 @@ const Dashboard = () => {
   };
 
   useEffect(() => {
-    const storedQueueStatus = localStorage.getItem("queueStatus");
-    const storedInQueue = localStorage.getItem("inQueue");
-    const storedIsJoined = localStorage.getItem("isJoined");
-
-    if (storedInQueue === "true") {
-      setInQueue(true);
-      setQueueStatus(storedQueueStatus || "Not in queue");
-    }
-    if (storedIsJoined === "true") {
-      setIsJoined(true);
-    }
+    const storedInQueue = localStorage.getItem("inQueue") === "true";
+    setInQueue(storedInQueue);
+    setQueueStatus(storedInQueue ? "In queue" : "Not in queue");
+    checkQueueStatus();
   }, []);
 
   useEffect(() => {
-    checkQueueStatus();
-    const interval = setInterval(() => {
-      checkQueueStatus();
-    }, 5000); // Check every 5 seconds
+    const interval = setInterval(checkQueueStatus, 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -70,8 +54,8 @@ const Dashboard = () => {
       setQueueStatus(response.data.message || "Not in queue");
       setQueueCount(response.data.queue_count);
       setQueueTime(response.data.queue_time);
-      localStorage.setItem("queueStatus", response.data.message || "Not in queue");
       localStorage.setItem("inQueue", response.data.in_queue.toString());
+      localStorage.setItem("queueStatus", response.data.message || "Not in queue");
     } catch (error) {
       console.error("Error checking queue status:", error);
     }
@@ -82,10 +66,8 @@ const Dashboard = () => {
       const response = await axios.post("/queue/join");
       setQueueStatus(response.data.message);
       setInQueue(true);
-      setIsJoined(true);
       localStorage.setItem("queueStatus", response.data.message);
       localStorage.setItem("inQueue", "true");
-      localStorage.setItem("isJoined", "true");
     } catch (error) {
       setQueueStatus(error.response?.data?.message || "An error occurred.");
     }
@@ -96,10 +78,8 @@ const Dashboard = () => {
       const response = await axios.post("/queue/leave");
       setQueueStatus(response.data.message);
       setInQueue(false);
-      setIsJoined(false);
       localStorage.setItem("queueStatus", response.data.message);
       localStorage.setItem("inQueue", "false");
-      localStorage.setItem("isJoined", "false");
     } catch (error) {
       setQueueStatus(error.response?.data?.message || "An error occurred.");
     }
@@ -119,17 +99,17 @@ const Dashboard = () => {
 
   const handleCreateSoloGame = async () => {
     try {
-        const response = await axios.post("/game/createSolo", { difficulty });
-        console.log("Solo game creation response:", response.data); // Log the response
-        localStorage.setItem("lastSoloGameId", response.data.redirect_url.split('/').pop());
-        if (response.data.redirect_url) {
-            window.location.href = response.data.redirect_url;
-        }
+      const response = await axios.post("/game/createSolo", { difficulty });
+      console.log("Solo game creation response:", response.data);
+      localStorage.setItem("lastSoloGameId", response.data.redirect_url.split('/').pop());
+      if (response.data.redirect_url) {
+        window.location.href = response.data.redirect_url;
+      }
     } catch (error) {
-        console.error("Error creating solo game:", error.response?.data || error);
-        alert("Failed to create solo game: " + (error.response?.data?.message || "Unknown error"));
+      console.error("Error creating solo game:", error.response?.data || error);
+      alert("Failed to create solo game: " + (error.response?.data?.message || "Unknown error"));
     }
-}
+  };
 
   const handleJoinByInviteCode = async () => {
     if (!inviteCode) {
@@ -137,7 +117,7 @@ const Dashboard = () => {
       return;
     }
     try {
-      const response = await axios.post("/lobby/join", { invite_code: inviteCode });
+      const response = await axios.post(`/lobby/${inviteCode}/join`, { invite_code: inviteCode });
       if (response.data.redirect_url) {
         window.location.href = response.data.redirect_url;
       }
@@ -155,7 +135,6 @@ const Dashboard = () => {
         initial="hidden"
         animate="visible"
       >
-        {/* Animated Background Elements */}
         <motion.div 
           className="absolute w-96 h-96 bg-purple-500/20 rounded-full blur-3xl"
           animate={{ scale: [1, 1.2, 1], rotate: 360 }}
@@ -189,9 +168,8 @@ const Dashboard = () => {
             {queueStatus}
           </motion.p>
 
-          {/* Buttons */}
           <motion.div className="flex flex-col items-center gap-4" variants={itemVariants}>
-            {!isJoined && (
+            {!inQueue && (
               <motion.button
                 onClick={handleJoinQueue}
                 className="w-64 py-4 bg-gradient-to-r from-blue-600 to-blue-800 text-white rounded-lg shadow-lg hover:shadow-xl"
@@ -242,7 +220,6 @@ const Dashboard = () => {
             </motion.button>
           </motion.div>
 
-          {/* Invite Code Input */}
           {showInviteInput && (
             <motion.div 
               className="mt-6 text-center"
@@ -272,7 +249,6 @@ const Dashboard = () => {
             </motion.div>
           )}
 
-          {/* Queue Info */}
           {inQueue && (
             <motion.div 
               className="mt-8 bg-gray-800/90 p-6 rounded-lg shadow-lg border border-gray-700/50 relative"

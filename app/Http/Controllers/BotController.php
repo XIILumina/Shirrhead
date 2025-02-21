@@ -1,119 +1,128 @@
-<?php 
+<?php
+
 namespace App\Http\Controllers;
 
 use App\Models\Game;
 use App\Models\Player;
+use App\Models\Card;
 use Illuminate\Http\Request;
+use App\Events\CardPlayed;
 
 class BotController extends Controller
 {
     public function playTurn($gameId)
     {
         $game = Game::findOrFail($gameId);
-        $bots = Player::where('game_id', $gameId)->where('is_bot', true)->get();
+        $bot = Player::where('game_id', $gameId)->where('id', $game->current_turn)->where('is_bot', true)->first();
 
-        foreach ($bots as $bot) {
-            $hand = json_decode($bot->hand, true);
-            $gameCards = json_decode($game->cards, true);
-            $pile = $gameCards['pile'] ?? [];
-
-            // Check if the bot can play a card
-            $canPlay = false;
-            foreach ($hand as $card) {
-                if ($this->isValidPlay($card, end($pile))) {
-                    $canPlay = true;
-                    break;
-                }
-            }
-
-            if (!$canPlay) {
-                // Bot cannot play a card, so it picks up the pile
-                $this->pickUpPile($bot, $game);
-            } else {
-                // Bot plays a random valid card
-                $this->playRandomCard($bot, $game);
-            }
+        if (!$bot) {
+            return response()->json(['message' => 'No bot turn'], 400);
         }
 
-        return response()->json(['message' => 'Bots played their turns']);
-    }
+        $hand = Card::where('player_id', $bot->id)->where('location', 'hand')->orderBy('position')->get();
+        $pileTop = Card::where('game_id', $gameId)->where('location', 'pile')->orderBy('position', 'desc')->first();
 
-    private function pickUpPile($bot, $game)
-    {
-        $gameCards = json_decode($game->cards, true);
-        $pile = $gameCards['pile'] ?? [];
-
-        if (empty($pile)) {
-            return; // No cards to pick up
-        }
-
-        // Add pile to bot's hand
-        $hand = json_decode($bot->hand, true);
-        $hand = array_merge($hand, $pile);
-
-        // Clear the pile
-        $gameCards['pile'] = [];
-        $game->cards = json_encode($gameCards);
-
-        // Save updates
-        $bot->hand = json_encode($hand);
-        $bot->save();
-        $game->save();
-    }
-
-    private function playRandomCard($bot, $game)
-    {
-        $hand = json_decode($bot->hand, true);
-        $gameCards = json_decode($game->cards, true);
-        $pile = $gameCards['pile'] ?? [];
-
-        // Find a random valid card to play
         foreach ($hand as $card) {
-            if ($this->isValidPlay($card, end($pile))) {
-                // Play the card
-                $this->playCard($bot, $game, $card);
-                break;
+            if (!$pileTop || $this->isValidPlay($card, $pileTop)) {
+                return $this->playCard($gameId, $card->id);
             }
         }
+
+        return $this->pickUpPile($gameId);
+    }
+
+    public function playCard($gameId, $cardId)
+    {
+        $game = Game::findOrFail($gameId);
+        $bot = Player::where('game_id', $gameId)->where('id', $game->current_turn)->where('is_bot', true)->first();
+        $card = Card::find($cardId);
+
+        if (!$bot || !$card || $card->player_id != $bot->id || $card->location != 'hand') {
+            return response()->json(['message' => 'Invalid bot card play'], 400);
+        }
+
+        $topCard = Card::where('game_id', $gameId)->where('location', 'pile')->orderBy('position', 'desc')->first();
+        if ($topCard && !$this->isValidPlay($card, $topCard)) {
+            return response()->json(['message' => 'Invalid bot card play'], 400);
+        }
+
+        $pileCount = Card::where('game_id', $gameId)->where('location', 'pile')->count();
+        $card->update([
+            'player_id' => null,
+            'location' => 'pile',
+            'position' => $pileCount,
+        ]);
+
+        if ($card->value === '10') {
+            Card::where('game_id', $gameId)->where('location', 'pile')->delete();
+        }
+
+        $handCount = Card::where('player_id', $bot->id)->where('location', 'hand')->count();
+        if ($handCount < 3) {
+            $deckCard = Card::where('game_id', $gameId)->where('location', 'deck')->orderBy('position')->first();
+            if ($deckCard) {
+                $deckCard->update([
+                    'player_id' => $bot->id,
+                    'location' => 'hand',
+                    'position' => $handCount,
+                ]);
+            }
+        }
+
+        $nextPlayer = Player::where('game_id', $gameId)->where('position', '>', $bot->position)->orderBy('position')->first()
+            ?? Player::where('game_id', $gameId)->orderBy('position')->first();
+        $game->current_turn = $nextPlayer->id;
+        $game->save();
+
+        broadcast(new CardPlayed($gameId, $card->toArray()))->toOthers();
+
+        // Chain to next bot with delay
+        if ($nextPlayer->is_bot) {
+            dispatch(function () use ($gameId) {
+                $this->playTurn($gameId);
+            })->delay(now()->addSeconds(1));
+        }
+
+        return response()->json(['message' => 'Bot played card']);
     }
 
     private function isValidPlay($card, $topCard)
     {
-        // Special cards like '2' are always valid
-        if ($card['value'] === '2') return true;
-
-        // '10' burns the pile, always valid
-        if ($card['value'] === '10') return true;
-
-        // Normal card check: must be >= top card
+        if (in_array($card->value, ['2', '10'])) return true;
         $values = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
-        $cardIndex = array_search($card['value'], $values);
-        $topCardIndex = array_search($topCard['value'], $values);
-
-        return $cardIndex >= $topCardIndex;
+        return array_search($card->value, $values) >= array_search($topCard->value, $values);
     }
 
-    private function playCard($bot, $game, $card)
+
+    public function pickUpPile($gameId)
     {
-        $hand = json_decode($bot->hand, true);
-        $gameCards = json_decode($game->cards, true);
-        $pile = $gameCards['pile'] ?? [];
+        $game = Game::findOrFail($gameId);
+        $bot = Player::where('game_id', $gameId)->where('id', $game->current_turn)->where('is_bot', true)->first();
 
-        // Remove the card from the bot's hand
-        $index = array_search($card, $hand);
-        unset($hand[$index]);
-        $hand = array_values($hand); // Reindex the array
+        if (!$bot) {
+            return response()->json(['message' => 'No bot turn'], 400);
+        }
 
-        // Add the card to the pile
-        $pile[] = $card;
+        $pile = Card::where('game_id', $gameId)->where('location', 'pile')->get();
+        if ($pile->isEmpty()) {
+            return response()->json(['message' => 'Pile is empty'], 400);
+        }
 
-        // Update game state
-        $gameCards['pile'] = $pile;
-        $game->cards = json_encode($gameCards);
+        $handCount = Card::where('player_id', $bot->id)->where('location', 'hand')->count();
+        foreach ($pile as $index => $card) {
+            $card->update([
+                'player_id' => $bot->id,
+                'location' => 'hand',
+                'position' => $handCount + $index,
+            ]);
+        }
 
-        // Save changes
-        $bot->hand = json_encode($hand);
-        $bot->save();
+        $nextPlayer = Player::where('game_id', $gameId)->where('position', '>', $bot->position)->orderBy('position')->first()
+            ?? Player::where('game_id', $gameId)->orderBy('position')->first();
+        $game->current_turn = $nextPlayer->id;
         $game->save();
+
+        return response()->json(['message' => 'Bot picked up pile']);
     }
+
 }
