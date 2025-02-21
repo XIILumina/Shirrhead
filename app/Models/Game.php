@@ -14,7 +14,8 @@ class Game extends Model
         'status',
         'current_turn',
         'invite_code',
-        'start_time', // Added since it's used in createSoloGame
+        'start_time',
+        'winner_id',
     ];
 
     public function players()

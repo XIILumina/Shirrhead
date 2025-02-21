@@ -14,6 +14,7 @@ const Game = ({ game }) => {
   const [enemies, setEnemies] = useState([]);
   const [error, setError] = useState(null);
   const [pickedUpCard, setPickedUpCard] = useState(null);
+  const [gameStatus, setGameStatus] = useState("ongoing");
 
   const cardVariants = {
     initial: { y: 50, opacity: 0, rotate: -5 },
@@ -40,7 +41,7 @@ const Game = ({ game }) => {
     });
 
     echo.channel(`game.${game.id}`).listen(".card.played", (e) => {
-      console.log("Pusher event received:", e); // Debug Pusher data
+      console.log("Pusher event received:", e);
       fetchGameState();
     });
 
@@ -59,6 +60,10 @@ const Game = ({ game }) => {
       setPlayerTurn(response.data.turn);
       setEnemies(response.data.enemies || []);
       setError(null);
+
+      // Check game status via API or infer from cards
+      const gameResponse = await axios.get(`/game/${game.id}`);
+      setGameStatus(gameResponse.data.status);
     } catch (err) {
       console.error("Error fetching game state:", err.response?.data || err);
       setError(err.response?.data?.message || "Failed to load game state");
@@ -71,7 +76,12 @@ const Game = ({ game }) => {
       const response = await axios.post(`/game/${game.id}/play-card`, { card_id: card.id });
       console.log("Play card response:", response.data);
       fetchGameState();
-      setError(null);
+      if (response.data.winner) {
+        setGameStatus("finished");
+        setError(`Player ${response.data.winner} won!`);
+      } else {
+        setError(null);
+      }
     } catch (err) {
       console.error("Error playing card:", err.response?.data || err);
       setError(err.response?.data?.message || "Failed to play card");
@@ -109,6 +119,12 @@ const Game = ({ game }) => {
     }
   };
 
+  const getPlayableCards = () => {
+    if (hand.length > 0) return hand;
+    if (visibleCards.length > 0) return visibleCards;
+    return hiddenCards;
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-900 to-green-700 text-white flex flex-col justify-between p-4">
       <AnimatePresence>
@@ -130,13 +146,33 @@ const Game = ({ game }) => {
         )}
       </AnimatePresence>
 
+      {gameStatus === "finished" && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+          <div className="bg-white text-black p-8 rounded-lg">
+            <h2 className="text-2xl">Game Over!</h2>
+            <p>{error || "Someone won!"}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="mt-4 bg-green-600 text-white px-4 py-2 rounded"
+            >
+              Play Again
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="relative flex-1 flex items-center justify-center">
         {/* Enemies */}
-        {enemies.length > 0 && (
-          <motion.div className="absolute top-0 left-1/2 transform -translate-x-1/2" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-            <h3 className="text-lg mb-2 text-center">{enemies[0].name}</h3>
+        {enemies.map((enemy, idx) => (
+          <motion.div
+            key={idx}
+            className={`absolute ${idx === 0 ? 'top-0 left-1/2 transform -translate-x-1/2' : idx === 1 ? 'left-0 top-1/2 transform -translate-y-1/2 rotate-90' : 'right-0 top-1/2 transform -translate-y-1/2 -rotate-90'}`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+          >
+            <h3 className="text-lg mb-2 text-center">{enemy.name}</h3>
             <div className="flex space-x-2 justify-center">
-              {enemies[0].visible_cards.map((card) => (
+              {enemy.visible_cards.map((card) => (
                 <motion.img
                   key={card.id}
                   src={`/images/cards/${card.value}_of_${card.suit}.png`}
@@ -149,43 +185,7 @@ const Game = ({ game }) => {
               ))}
             </div>
           </motion.div>
-        )}
-        {enemies.length > 1 && (
-          <motion.div className="absolute left-0 top-1/2 transform -translate-y-1/2 rotate-90" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-            <h3 className="text-lg mb-2 text-center">{enemies[1].name}</h3>
-            <div className="flex space-x-2 justify-center">
-              {enemies[1].visible_cards.map((card) => (
-                <motion.img
-                  key={card.id}
-                  src={`/images/cards/${card.value}_of_${card.suit}.png`}
-                  alt={`${card.value} of ${card.suit}`}
-                  className="w-16 h-24"
-                  variants={cardVariants}
-                  initial="initial"
-                  animate="animate"
-                />
-              ))}
-            </div>
-          </motion.div>
-        )}
-        {enemies.length > 2 && (
-          <motion.div className="absolute right-0 top-1/2 transform -translate-y-1/2 -rotate-90" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-            <h3 className="text-lg mb-2 text-center">{enemies[2].name}</h3>
-            <div className="flex space-x-2 justify-center">
-              {enemies[2].visible_cards.map((card) => (
-                <motion.img
-                  key={card.id}
-                  src={`/images/cards/${card.value}_of_${card.suit}.png`}
-                  alt={`${card.value} of ${card.suit}`}
-                  className="w-16 h-24"
-                  variants={cardVariants}
-                  initial="initial"
-                  animate="animate"
-                />
-              ))}
-            </div>
-          </motion.div>
-        )}
+        ))}
 
         {/* Table */}
         <div className="flex space-x-8">
@@ -222,6 +222,7 @@ const Game = ({ game }) => {
               <button
                 onClick={pickUpPile}
                 className="absolute bottom-0 left-0 bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded z-10"
+                disabled={!playerTurn}
               >
                 Pick Up
               </button>
@@ -234,7 +235,7 @@ const Game = ({ game }) => {
         <h2 className="text-xl mb-4">Your Cards {playerTurn ? "(Your Turn)" : ""}</h2>
         <div className="flex space-x-3">
           <AnimatePresence>
-            {hand.map((card) => (
+            {getPlayableCards().map((card) => (
               <motion.button
                 key={card.id}
                 onClick={() => playCard(card)}
@@ -263,7 +264,7 @@ const Game = ({ game }) => {
                 key={card.id}
                 src={`/images/cards/${card.value}_of_${card.suit}.png`}
                 alt={`${card.value} of ${card.suit}`}
-                className="w-24 h-36 absolute"
+                className="w-24 h-36 absolute opacity-50"
                 variants={cardVariants}
                 initial="initial"
                 animate="animate"
@@ -275,7 +276,7 @@ const Game = ({ game }) => {
                 key={card.id}
                 src={`/images/cards/${card.value}_of_${card.suit}.png`}
                 alt={`${card.value} of ${card.suit}`}
-                className="w-24 h-36 absolute"
+                className="w-24 h-36 absolute opacity-50"
                 variants={cardVariants}
                 initial="initial"
                 animate="animate"
